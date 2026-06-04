@@ -6,6 +6,71 @@ from langchain.messages import HumanMessage, ToolMessage
 from langgraph.types import Command, interrupt
 
 
+class PlanChecklistStep(BaseModel):
+    step: str = Field(
+        ...,
+        description=(
+            "A short, concrete, verifiable checklist step. "
+            "It should describe one meaningful unit of work. "
+            "Keep the original step wording when only updating status."
+        ),
+    )
+
+    status: Literal["pending", "in_progress", "completed"] = Field(
+        ...,
+        description=(
+            "The current status of this checklist step. "
+            "'pending' means not started; "
+            "'in_progress' means this is the active step; "
+            "'completed' means the step has been finished and verified enough to move on."
+        ),
+    )
+
+
+def _coerce_checklist(checklist: list) -> list[dict]:
+    return [
+        step.model_dump() if hasattr(step, "model_dump") else dict(step)
+        for step in checklist
+    ]
+
+
+def _format_checklist(checklist: list[dict]) -> str:
+    if not checklist:
+        return "(empty)"
+
+    return "\n".join(
+        f"- [{step['status']}] {step['step']}"
+        for step in checklist
+    )
+
+
+def _count_in_progress(checklist: list[dict]) -> int:
+    return sum(step.get("status") == "in_progress" for step in checklist)
+
+
+def _coerce_plan(plan_state: dict) -> dict:
+    plan = plan_state.get("plan")
+    if plan:
+        return dict(plan)
+
+    structured_response = plan_state.get("structured_response")
+    if structured_response is None:
+        return {}
+
+    if hasattr(structured_response, "model_dump"):
+        return structured_response.model_dump()
+
+    return dict(structured_response)
+
+
+def _format_plan(plan: dict) -> str:
+    checklist = _format_checklist(plan.get("checklist", []))
+    return (
+        f"# Plan overview\n{plan.get('overview', '')}\n\n"
+        f"# Plan checklist\n{checklist}"
+    )
+
+
 class WritePlanInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True) #allow arbitrary types so Pydantic accepts ToolRuntime 
     objective: str = Field(
@@ -35,7 +100,7 @@ class WritePlan(BaseTool):
     )
     args_schema: Type[BaseModel] = WritePlanInput
 
-    def _run(self, objective: str, runtime: ToolRuntime) -> str:
+    def _run(self, objective: str, runtime: ToolRuntime):
         from AgentConfigSetup import agent_registry
 
         planner_agent = agent_registry.build_agent(agent_name="planner")
@@ -63,37 +128,17 @@ class WritePlan(BaseTool):
             }
         )
 
-        plan_context = plan_state["messages"][-1].content
+        plan = _coerce_plan(plan_state)
+        plan_context = _format_plan(plan) if plan else "Planner did not return a plan."
+        update = {
+            "messages": [ToolMessage(content=plan_context, tool_call_id=runtime.tool_call_id)]
+        }
 
-        return Command(
-            update = {
-                "plan_required": plan_state["plan_required"],
-                "plan": plan_state["plan"],
-                "messages": [ToolMessage(content=plan_context, tool_call_id=runtime.tool_call_id)]
-            }
-        )
+        if plan:
+            update["plan"] = plan
+
+        return Command(update=update)
     
-
-
-class PlanChecklistStep(BaseModel):
-    step: str = Field(
-        ...,
-        description=(
-            "A short, concrete, verifiable checklist step. "
-            "It should describe one meaningful unit of work. "
-            "Keep the original step wording when only updating status."
-        ),
-    )
-
-    status: Literal["pending", "in_progress", "completed"] = Field(
-        ...,
-        description=(
-            "The current status of this checklist step. "
-            "'pending' means not started; "
-            "'in_progress' means this is the active step; "
-            "'completed' means the step has been finished and verified enough to move on."
-        ),
-    )
 
 
 class UpdateChecklistInput(BaseModel):
@@ -137,7 +182,8 @@ class UpdateChecklist(BaseTool):
     args_schema: type[BaseModel] = UpdateChecklistInput
 
     def _run(self, updated_checklist: list, runtime: ToolRuntime):
-        original_checklist = runtime.state["plan"]["checklist"]
+        plan = runtime.state.get("plan", {})
+        original_checklist = plan.get("checklist", [])
 
         if not original_checklist:
             return Command(
@@ -159,21 +205,10 @@ class UpdateChecklist(BaseTool):
 
         original_todos_string = "\n".join(original_checklist_list)
 
-        updated_checklist = [
-            step.model_dump() if hasattr(step, "model_dump") else step
-            for step in updated_checklist
-        ]
+        updated_checklist = _coerce_checklist(updated_checklist)
 
-        updated_checklist_list = []
-        updated_in_progress = 0
-
-        for step in updated_checklist:
-            updated_in_progress += step["status"] == "in_progress"
-            updated_checklist_list.append(
-                f"[] {step['step']}\t Status: {step['status']}"
-            )
-
-        updated_checklist_string = "\n".join(updated_checklist_list)
+        updated_in_progress = _count_in_progress(updated_checklist)
+        updated_checklist_string = _format_checklist(updated_checklist)
 
         if updated_in_progress > 1:
             return Command(
@@ -214,7 +249,7 @@ class UpdateChecklist(BaseTool):
             return Command(
                 update={
                     "plan": {
-                        "overview": runtime.state["plan"]["overview"],
+                        **plan,
                         "checklist": updated_checklist,
                     },
                     "messages": [
@@ -240,6 +275,107 @@ class UpdateChecklist(BaseTool):
                 ]
             }
         )
-            
-        
 
+
+class AdvanceChecklistInput(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    runtime: ToolRuntime
+
+
+class AdvanceChecklist(BaseTool):
+    name: str = "advance_checklist"
+    description: str = (
+        "Advance the current plan checklist by marking one step completed and moving the next pending step "
+        "to 'in_progress'. Use this only after the single current 'in_progress' step has actually been completed. "
+        "This tool is for routine progress advancement only; use update_checklist for manual checklist edits."
+    )
+    args_schema: type[BaseModel] = AdvanceChecklistInput
+
+    def _run(self, runtime: ToolRuntime):
+        plan = runtime.state.get("plan", {})
+        original_checklist = plan.get("checklist", [])
+
+        if not original_checklist:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="No plan checklist exists. Create a plan before advancing it.",
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ]
+                }
+            )
+
+        checklist = _coerce_checklist(original_checklist)
+
+        active_indices = [
+            idx for idx, step in enumerate(checklist)
+            if step.get("status") == "in_progress"
+        ]
+
+        if len(active_indices) > 1:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=(
+                                "Checklist has more than one 'in_progress' step. "
+                                "Use update_checklist to fix statuses before advancing:\n\n"
+                                f"{_format_checklist(checklist)}"
+                            ),
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ]
+                }
+            )
+
+        if not active_indices:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=(
+                                "Checklist has no 'in_progress' step to advance. "
+                                "Use update_checklist to mark the active step before advancing."
+                            ),
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ]
+                }
+            )
+
+        completed_step_index = active_indices[0]
+
+        next_pending_index = next(
+            (
+                idx for idx, step in enumerate(checklist[completed_step_index + 1:], start=completed_step_index + 1)
+                if step.get("status") == "pending"
+            ),
+            None,
+        )
+
+        for idx, step in enumerate(checklist):
+            if idx == completed_step_index:
+                step["status"] = "completed"
+            elif idx == next_pending_index:
+                step["status"] = "in_progress"
+            elif step.get("status") == "in_progress":
+                step["status"] = "pending"
+
+        verb = "completed" if next_pending_index is None else "advanced"
+
+        return Command(
+            update={
+                "plan": {
+                    **plan,
+                    "checklist": checklist,
+                },
+                "messages": [
+                    ToolMessage(
+                        content=f"Checklist {verb}:\n\n{_format_checklist(checklist)}",
+                        tool_call_id=runtime.tool_call_id,
+                    )
+                ],
+            }
+        )

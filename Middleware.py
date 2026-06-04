@@ -51,9 +51,12 @@ class StorePlanOutputMiddleware(AgentMiddleware):
         return {
             "structured_response": out_dict,
             "plan": {
-                "plan_required": structured_out.plan_required,
-                "overview": structured_out.overview,
-                "checklist": [step.model_dump() for step in structured_out.checklist]
+                "plan_required": out_dict["plan_required"],
+                "overview": out_dict["overview"],
+                "checklist": [
+                    step.model_dump() if hasattr(step, "model_dump") else dict(step)
+                    for step in out_dict["checklist"]
+                ]
             }
         }
     
@@ -62,7 +65,7 @@ class StorePlanOutputMiddleware(AgentMiddleware):
 def check_plan(state: AgentState, runtime: Runtime):
     plan = state.get("plan", {})
 
-    if not plan["plan_required"]:
+    if not plan.get("plan_required", False):
         return None
     else:
             

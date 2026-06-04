@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import TypedDict, Annotated
 from Messages import MessageContainer, MessageContainerConfig
-from project.BioMultiAgent.AgentConfig import AgentRegistry
+from AgentConfig import AgentRegistry
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph.message import AnyMessage, add_messages

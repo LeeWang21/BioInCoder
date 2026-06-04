@@ -5,7 +5,7 @@ from AgentConfig import AgentConfig, AgentRegistry
 from Middleware import check_plan, StorePlanOutputMiddleware
 from Ask_user_tool import AskUserTool
 from Skill_tool import SkillTool, generate_skill_tool_prompt
-from Todo_tools import WriteTodos
+from Todo_tools import WritePlan, UpdateChecklist, AdvanceChecklist
 from LLM import llm
 from Prompts import PLANNER_PROMPT, BIOINCODER_PROMPT
 
@@ -93,8 +93,9 @@ ckpt = InMemorySaver()
 agent_registry.register_tool(name="Bash_tool", tool=ShellTool(name = "Bash"))
 agent_registry.register_tool(name="Ask_user_tool", tool=AskUserTool())
 agent_registry.register_tool(name="Skill_tool", tool=SkillTool())
-agent_registry.register_tool(name="write_todos", tool=WriteTodos())
-#plan tools: write_todos, update_todos, advance_todos
+agent_registry.register_tool(name="write_plan", tool=WritePlan())
+agent_registry.register_tool(name="update_checklist", tool=UpdateChecklist())
+agent_registry.register_tool(name="advance_checklist", tool=AdvanceChecklist())
 
 #register_middleware
 agent_registry.register_middleware(name="check_plan", middleware=check_plan)
@@ -119,7 +120,14 @@ Plan_AgentConfig = AgentConfig(
 )
 
 #BioInCoder_AgentConfig
-tools_for_Coder = ["Ask_user_tool", "Skill_tool", "Bash_tool", "write_todos"]
+tools_for_Coder = [
+    "Ask_user_tool",
+    "Skill_tool",
+    "Bash_tool",
+    "write_plan",
+    "update_checklist",
+    "advance_checklist",
+]
 
 SKILL_PROMPT_FOR_CODER = generate_skill_tool_prompt() if "Skill_tool" in tools_for_Coder else ""
 
