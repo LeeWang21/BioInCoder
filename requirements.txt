@@ -1,0 +1,9 @@
+pydantic>=2
+PyYAML>=6
+langchain>=1
+langchain-core>=1
+langchain-community>=0.4
+langchain-deepseek>=0.1
+langgraph>=1
+nbformat>=5
+jupyter-client>=8
