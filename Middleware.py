@@ -16,9 +16,7 @@ from langgraph.types import interrupt
 from langgraph.runtime import Runtime
 
 # =========================
-
 # Middleware for plan
-
 # =========================
 class PlanChecklistStep(TypedDict, total=False):
     step: str
