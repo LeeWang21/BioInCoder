@@ -93,9 +93,9 @@ ckpt = InMemorySaver()
 agent_registry.register_tool(name="Bash_tool", tool=ShellTool(name = "Bash"))
 agent_registry.register_tool(name="Ask_user_tool", tool=AskUserTool())
 agent_registry.register_tool(name="Skill_tool", tool=SkillTool())
-agent_registry.register_tool(name="write_plan", tool=WritePlan())
-agent_registry.register_tool(name="update_checklist", tool=UpdateChecklist())
-agent_registry.register_tool(name="advance_checklist", tool=AdvanceChecklist())
+agent_registry.register_tool(name="Write_plan", tool=WritePlan())
+agent_registry.register_tool(name="Update_checklist", tool=UpdateChecklist())
+agent_registry.register_tool(name="Advance_checklist", tool=AdvanceChecklist())
 
 #register_middleware
 agent_registry.register_middleware(name="check_plan", middleware=check_plan)
@@ -124,9 +124,9 @@ tools_for_Coder = [
     "Ask_user_tool",
     "Skill_tool",
     "Bash_tool",
-    "write_plan",
-    "update_checklist",
-    "advance_checklist",
+    "Write_plan",
+    "Update_checklist",
+    "Advance_checklist",
 ]
 
 SKILL_PROMPT_FOR_CODER = generate_skill_tool_prompt() if "Skill_tool" in tools_for_Coder else ""

@@ -12,7 +12,7 @@ class PlanChecklistStep(BaseModel):
         description=(
             "A short, concrete, verifiable checklist step. "
             "It should describe one meaningful unit of work. "
-            "Keep the original step wording when only updating status."
+            "For steps without minor revision, Keep the original step wording."
         ),
     )
 
@@ -39,7 +39,7 @@ def _format_checklist(checklist: list[dict]) -> str:
         return "(empty)"
 
     return "\n".join(
-        f"- [{step['status']}] {step['step']}"
+        f"[] {step['step']}\t Status: {step['status']}"
         for step in checklist
     )
 
@@ -117,7 +117,7 @@ class WritePlan(BaseTool):
                 "Create or update the execution plan for the following objective.\n\n"
                 f"# Objective\n{objective}\n\n"
                 "Use the current conversation and runtime state as context. "
-                "If a plan already exists in context, update it instead of starting from scratch. "
+                "If a plan already exists in context, reset it for major revision instead of starting from scratch. "
                 "Return only the required PlanOutputFormat structured output."
             )
         )
@@ -129,7 +129,7 @@ class WritePlan(BaseTool):
         )
 
         plan = _coerce_plan(plan_state)
-        plan_context = _format_plan(plan) if plan else "Planner did not return a plan."
+        plan_context = _format_plan(plan) if plan["plan_required"] else "The user quit the plan generation. No plan needed for execution. stop the execution and wait for user request."
         update = {
             "messages": [ToolMessage(content=plan_context, tool_call_id=runtime.tool_call_id)]
         }
@@ -147,17 +147,16 @@ class UpdateChecklistInput(BaseModel):
     updated_checklist: list[PlanChecklistStep] = Field(
         ...,
         description=(
-            "The complete revised checklist that should replace the current plan checklist. "
+            "The minor revised checklist that should replace the current plan checklist. "
             "Pass the full checklist, not only the changed step. "
             "Each item must preserve the original task meaning unless a minor revision is needed. "
-            "Use this to update progress status after completing a step, starting the next step, "
-            "or making a small checklist refinement during execution. "
+            "Use this making a small checklist refinement during execution. "
+            "Do not use this to advance progress status."
+            "Do not use this for create or reset the plan."
             "Use only these statuses: 'pending', 'in_progress', and 'completed'. "
             "Normally there should be exactly one 'in_progress' step while work remains. "
-            "If the whole task is finished, all steps should be 'completed'. "
             "Do not mark a step as 'completed' unless it has actually been completed or verified. "
             "Do not add unrelated new steps, remove important remaining steps, or rewrite the plan strategy. "
-            "For major plan changes, create or reset the plan instead of using this checklist update tool."
         ),
     )
 
@@ -167,17 +166,16 @@ class UpdateChecklistInput(BaseModel):
 class UpdateChecklist(BaseTool):
     name: str = "update_checklist"
     description: str = (
-        "Update the current plan checklist in graph state. "
-        "Use this tool after meaningful progress has been made, such as marking a completed step as 'completed', "
-        "moving the next step to 'in_progress', or applying a minor checklist refinement during execution. "
-        "The input must be the complete revised checklist, not only the changed item. "
+        "make a minor revision for the current plan checklist. "
+        "Use this tool for applying a minor checklist refinement during execution. "
+        "The input must be the complete minor revised checklist, not only the changed item. "
         "This tool compares the original checklist with the proposed updated checklist and asks for user confirmation "
         "before writing the update to state. "
-        "Use this tool only for checklist progress/status updates or small checklist edits. "
+        "Use this tool only for small checklist edits. "
         "Do not use it to create the initial plan, rewrite the planning brief, change the overall strategy, "
         "or perform the task itself. "
-        "Normally keep exactly one checklist item as 'in_progress' while work remains; "
-        "when the task is fully complete, mark all checklist items as 'completed'."
+        "Do not use it to advance the checklist."
+        "Normally keep exactly one checklist item as 'in_progress' while work remains"
     )
     args_schema: type[BaseModel] = UpdateChecklistInput
 
@@ -287,7 +285,7 @@ class AdvanceChecklist(BaseTool):
     description: str = (
         "Advance the current plan checklist by marking one step completed and moving the next pending step "
         "to 'in_progress'. Use this only after the single current 'in_progress' step has actually been completed. "
-        "This tool is for routine progress advancement only; use update_checklist for manual checklist edits."
+        "This tool is for routine progress advancement only; use update_checklist for manual checklist minor edits."
     )
     args_schema: type[BaseModel] = AdvanceChecklistInput
 
@@ -355,13 +353,10 @@ class AdvanceChecklist(BaseTool):
             None,
         )
 
-        for idx, step in enumerate(checklist):
-            if idx == completed_step_index:
-                step["status"] = "completed"
-            elif idx == next_pending_index:
-                step["status"] = "in_progress"
-            elif step.get("status") == "in_progress":
-                step["status"] = "pending"
+        checklist[completed_step_index]["status"] = "completed"
+        if next_pending_index is not None:
+            checklist[next_pending_index]["status"] = "in_progress"
+
 
         verb = "completed" if next_pending_index is None else "advanced"
 

@@ -36,25 +36,29 @@ class StorePlanOutputMiddleware(AgentMiddleware):
     def after_agent(self, state: AgentState, runtime: Runtime):
         structured_out = state.get("structured_response")
 
+        #skip if no structured_out
         if structured_out is None:
             return None
         
+        #deserialize
         if hasattr(structured_out, "model_dump"):
             out_dict = structured_out.model_dump()
         elif isinstance(structured_out, dict):
             out_dict = structured_out
         else:
             out_dict = dict(structured_out)
+
+        out_dict["checklist"] = [
+            step.model_dump() if hasattr(step, "model_dump") else dict(step)
+            for step in out_dict["checklist"]
+        ]
         
         return {
             "structured_response": out_dict,
             "plan": {
                 "plan_required": out_dict["plan_required"],
                 "overview": out_dict["overview"],
-                "checklist": [
-                    step.model_dump() if hasattr(step, "model_dump") else dict(step)
-                    for step in out_dict["checklist"]
-                ]
+                "checklist": out_dict["checklist"]
             }
         }
     
@@ -85,7 +89,7 @@ def check_plan(state: AgentState, runtime: Runtime):
 
         if checklist_in_progress > 1:
             return {
-                "messages": [HumanMessage(content=f"current proposed checklist:\n{checklist_string}.\n Do not set more than one 'in_progress' for checklist status.")]
+                "messages": [HumanMessage(content=f"Do not set more than one 'in_progress' status for checklist:\n{checklist_string}\n")]
             }
             
             
@@ -100,14 +104,15 @@ def check_plan(state: AgentState, runtime: Runtime):
             
         elif comment.strip().lower() in {"exit", "exiting", "quit"}:
             return {
-                "messages": [HumanMessage(content=f"No plan needed for execution.")],
+                "messages": [HumanMessage(content=f"The user quit the plan generation. No plan needed for execution. Continue the execution without plan")],
                 "plan": {
+                    **plan,
                     "plan_required": False
                 },
             }
         else:
             return {
-                "messages": [HumanMessage(content=f"Refine the plan: {plan_context}. The comment is: {comment}")],
+                "messages": [HumanMessage(content=f"Refine the plan based on the comment: {plan_context}. The comment is: {comment}")],
                 "jump_to": "model"
             }
     

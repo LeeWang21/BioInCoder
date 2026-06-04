@@ -40,4 +40,4 @@ class AskUserTool(BaseTool):
 
     async def _arun(self, question: str) -> str:
         answer = interrupt(question)
-        return f"User comment: {str(answer)}"
+        return f"Question:\n{str(question)}\nUser answer:\n{str(answer)}"

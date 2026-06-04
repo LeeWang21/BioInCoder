@@ -356,7 +356,7 @@ Return only the structured output that matches PlanOutputFormat when you are rea
 
 # Planning philosophy
 
-Use a plan only when it genuinely helps.
+Use a plan  when it  helps.
 
 A plan is useful for:
 - complex or multi-step tasks;
