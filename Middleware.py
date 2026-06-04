@@ -15,7 +15,11 @@ from langchain_core.messages import HumanMessage
 from langgraph.types import interrupt
 from langgraph.runtime import Runtime
 
+# =========================
 
+# Middleware for plan
+
+# =========================
 class PlanChecklistStep(TypedDict, total=False):
     step: str
     status: Literal["pending", "in_progress", "completed"]
@@ -90,14 +94,15 @@ def check_plan(state: AgentState, runtime: Runtime):
 
         if comment.strip().lower() in {"yes", "yeah", "yep", "ok", "correct", "good", "perfect", "no comment"}:
             return {
-                "messages": [HumanMessage(content=f"Final plan overview and plan TODO/checklist: {plan_context}")]
+                "messages": [HumanMessage(content=f"Final plan overview and plan checklist: {plan_context}")]
             }
             
         elif comment.strip().lower() in {"exit", "exiting", "quit"}:
             return {
                 "messages": [HumanMessage(content=f"No plan needed for execution.")],
-                "plan_required": False,
-                "plan": {},
+                "plan": {
+                    "plan_required": False
+                },
             }
         else:
             return {
