@@ -10,7 +10,7 @@ from langchain_core.messages import AnyMessage, get_buffer_string, messages_to_d
 
 @dataclass
 class MessageContainerConfig:
-    default_channels: list[str] = field(default_factory=lambda: ["Code_Channel", "Plan_Channel"])
+    default_channels: list[str] = field(default_factory=list)
     allow_create_channel: bool = True
     user_id: str | None = None
     session_id: str | None = None

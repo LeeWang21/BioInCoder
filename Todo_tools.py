@@ -101,9 +101,7 @@ class WritePlan(BaseTool):
     args_schema: Type[BaseModel] = WritePlanInput
 
     def _run(self, objective: str, runtime: ToolRuntime):
-        from AgentConfigSetup import agent_registry
-
-        planner_agent = agent_registry.build_agent(agent_name="planner")
+        from AgentConfigSetup import multi_agent_runtime
 
         coder_msgs = runtime.state.get("messages", [])
 
@@ -122,14 +120,38 @@ class WritePlan(BaseTool):
             )
         )
 
-        plan_state = planner_agent.invoke(
-            {
+        request_id = runtime.tool_call_id
+        planner_config = multi_agent_runtime.make_child_config(
+            parent_config=getattr(runtime, "config", None),
+            agent_name="planner",
+            request_id=request_id,
+        )
+        plan_state, message_ref = multi_agent_runtime.invoke_agent(
+            agent_name="planner",
+            graph_input={
                 "messages": coder_msgs_sanitization + [planner_instruction],
-            }
+            },
+            request_id=request_id,
+            config=planner_config,
         )
 
         plan = _coerce_plan(plan_state)
-        plan_context = _format_plan(plan) if plan["plan_required"] else "The user quit the plan generation. No plan needed for execution. stop the execution and wait for user request."
+        plan_required = bool(plan.get("plan_required", False))
+        plan_context = (
+            _format_plan(plan)
+            if plan_required
+            else (
+                "No executable plan was produced. Either the user quit plan generation "
+                "or the planner returned plan_required=False."
+            )
+        )
+        if message_ref is not None:
+            plan_context = (
+                f"{plan_context}\n\n"
+                "# Saved subagent messages\n"
+                f"{message_ref.to_tool_hint()}"
+            )
+
         update = {
             "messages": [ToolMessage(content=plan_context, tool_call_id=runtime.tool_call_id)]
         }

@@ -1,13 +1,17 @@
+import os
 from typing import Literal 
 from pydantic import BaseModel, Field 
 
 from AgentConfig import AgentConfig, AgentRegistry
 from Middleware import check_plan, StorePlanOutputMiddleware
 from Ask_user_tool import AskUserTool
+from Message_tools import ReadAgentMessages, ListSavedMessageRefs
 from Skill_tool import SkillTool, generate_skill_tool_prompt
 from Todo_tools import WritePlan, UpdateChecklist, AdvanceChecklist
 from LLM import llm
 from Prompts import PLANNER_PROMPT, BIOINCODER_PROMPT
+from Runtime import MultiAgentRuntime
+from jupytercode_tool import JupyterCodeToolkit, JUPYTER_REGISTRY
 
 from langchain_community.tools import ShellTool
 from langgraph.checkpoint.memory import InMemorySaver
@@ -96,6 +100,11 @@ agent_registry.register_tool(name="Skill_tool", tool=SkillTool())
 agent_registry.register_tool(name="Write_plan", tool=WritePlan())
 agent_registry.register_tool(name="Update_checklist", tool=UpdateChecklist())
 agent_registry.register_tool(name="Advance_checklist", tool=AdvanceChecklist())
+agent_registry.register_tool(name="Read_agent_messages", tool=ReadAgentMessages())
+agent_registry.register_tool(name="List_saved_message_refs", tool=ListSavedMessageRefs())
+
+for tool in JupyterCodeToolkit().get_tools():
+    agent_registry.register_tool(name=tool.name, tool=tool)
 
 #register_middleware
 agent_registry.register_middleware(name="check_plan", middleware=check_plan)
@@ -124,9 +133,22 @@ tools_for_Coder = [
     "Ask_user_tool",
     "Skill_tool",
     "Bash_tool",
+    "Read_agent_messages",
+    "List_saved_message_refs",
     "Write_plan",
     "Update_checklist",
     "Advance_checklist",
+    "jupytercode_kernel_selection",
+    "jupytercode_notebooks_info",
+    "jupytercode_use_notebook",
+    "jupytercode_read_notebook",
+    "jupytercode_read_cell",
+    "jupytercode_insert_cell",
+    "jupytercode_execute_cell",
+    "jupytercode_insert_execute_code_cell",
+    "jupytercode_delete_cell",
+    "jupytercode_overwrite_cell_source",
+    "jupytercode_restart_kernel",
 ]
 
 SKILL_PROMPT_FOR_CODER = generate_skill_tool_prompt() if "Skill_tool" in tools_for_Coder else ""
@@ -144,3 +166,21 @@ BioInCoder_AgentConfig = AgentConfig(
 #register agent
 for config in [BioInCoder_AgentConfig, Plan_AgentConfig]:
     agent_registry.register_agent(config)
+
+
+# =========================
+# MultiAgentRuntime Setup
+# =========================
+BIOINCODER_USER_ID = os.environ.get("BIOINCODER_USER_ID", "default_user")
+BIOINCODER_SESSION_ID = os.environ.get("BIOINCODER_SESSION_ID", "default_session")
+JUPYTER_REGISTRY.configure(
+    user_id=BIOINCODER_USER_ID,
+    session_id=BIOINCODER_SESSION_ID,
+)
+
+multi_agent_runtime = MultiAgentRuntime(
+    agent_registry=agent_registry,
+    jupyter_registry=JUPYTER_REGISTRY,
+    user_id=BIOINCODER_USER_ID,
+    session_id=BIOINCODER_SESSION_ID,
+)
