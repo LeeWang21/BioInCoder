@@ -13,11 +13,8 @@ from langgraph.graph.message import AnyMessage, add_messages
 # =========================
 class MultiAgentState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
-    goal: str
     plan: dict
-    task: str
-    agent_from: str
-    agent_to: str
+
 
 
 @dataclass
@@ -113,47 +110,7 @@ class MultiAgentRuntime:
         parent_config["configurable"] = configurable
         return parent_config
 
-        
-    def ContextConcat(
-        self,
-        main_channel: str,
-        secondary_channel: str,
-        goal: str | None,
-        agent_from: str,
-        agent_to: str,
-        task: str | None,
-        agent_instruction: str | None,
-        extra_instruction: str | None,
-        plan: str | None = None
-    ):
-        
-        prompt_temp = ChatPromptTemplate.from_messages(
-            [
-                MessagesPlaceholder(variable_name = "channel"),
-                ("human", "{request_goal}"),
-                ("human", "{plan}"),
-                ("human", "{current_task}"),
-                ("human", "{agent_instruction}"),
-                ("human", "{extra_instruction}")
-            ]
-        )
-
-        
-
-        prompt_context = prompt_temp.invoke(
-            {
-                "channel": main_channel if agent_from != agent_to else secondary_channel,
-                "request_goal": f"The goal of user request is: {goal}",
-                "plan": "" if plan is None else plan,
-                "current_task": f"You are finishing the task: {task}",
-                "agent_instruction": f"Fllowing the instraction: {agent_instruction}",
-                "extra_instruction": f"extra the instraction: {extra_instruction}"
-            }
-        )
-
-        return prompt_context
     
-
     def get_agent(self, agent_name: str):
         return self.agent_registry.build_agent(agent_name)
 
