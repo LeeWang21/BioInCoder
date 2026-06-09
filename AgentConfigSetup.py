@@ -144,11 +144,10 @@ tools_for_Coder = [
     "jupytercode_read_notebook",
     "jupytercode_read_cell",
     "jupytercode_insert_cell",
-    "jupytercode_execute_cell",
     "jupytercode_insert_execute_code_cell",
     "jupytercode_delete_cell",
     "jupytercode_overwrite_cell_source",
-    "jupytercode_restart_kernel",
+    "jupytercode_session_control",
 ]
 
 SKILL_PROMPT_FOR_CODER = generate_skill_tool_prompt() if "Skill_tool" in tools_for_Coder else ""

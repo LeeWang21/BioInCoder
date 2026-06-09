@@ -10,6 +10,7 @@ and workflows for specific tasks.
 from typing import Any, Dict, Optional
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field, PrivateAttr
+from Tool_utils import tool_error_response
 
 
 class SkillToolInput(BaseModel):
@@ -70,10 +71,22 @@ Important:
         Returns:
             Dict containing the skill prompt and metadata
         """
-        return self.execute_skill(skill)
+        try:
+            return self.execute_skill(skill)
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint="Check that the skill registry can load SKILL.md files and that the requested skill name is valid.",
+            )
     
     async def _arun(self, skill: str) -> Dict[str, Any]:
-        return self.execute_skill(skill)
+        try:
+            return self.execute_skill(skill)
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint="Check that the skill registry can load SKILL.md files and that the requested skill name is valid.",
+            )
 
     def execute_skill(self, skill: str) -> Dict[str, Any]:
         """

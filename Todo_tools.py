@@ -4,6 +4,7 @@ from langchain.tools import BaseTool, ToolRuntime
 from langchain.messages import HumanMessage, ToolMessage
 
 from langgraph.types import Command, interrupt
+from Tool_utils import tool_error_command
 
 
 class PlanChecklistStep(BaseModel):
@@ -101,65 +102,72 @@ class WritePlan(BaseTool):
     args_schema: Type[BaseModel] = WritePlanInput
 
     def _run(self, objective: str, runtime: ToolRuntime):
-        from AgentConfigSetup import multi_agent_runtime
+        try:
+            from AgentConfigSetup import multi_agent_runtime
 
-        coder_msgs = runtime.state.get("messages", [])
+            coder_msgs = runtime.state.get("messages", [])
 
-        coder_msgs_sanitization = coder_msgs
-        if coder_msgs_sanitization and getattr(coder_msgs_sanitization[-1], "tool_calls", None):
-            coder_msgs_sanitization = coder_msgs_sanitization[:-1]
+            coder_msgs_sanitization = coder_msgs
+            if coder_msgs_sanitization and getattr(coder_msgs_sanitization[-1], "tool_calls", None):
+                coder_msgs_sanitization = coder_msgs_sanitization[:-1]
 
 
-        planner_instruction = HumanMessage(
-            content=(
-                "Create or update the execution plan for the following objective.\n\n"
-                f"# Objective\n{objective}\n\n"
-                "Use the current conversation and runtime state as context. "
-                "If a plan already exists in context, reset it for major revision instead of starting from scratch. "
-                "Return only the required PlanOutputFormat structured output."
+            planner_instruction = HumanMessage(
+                content=(
+                    "Create or update the execution plan for the following objective.\n\n"
+                    f"# Objective\n{objective}\n\n"
+                    "Use the current conversation and runtime state as context. "
+                    "If a plan already exists in context, reset it for major revision instead of starting from scratch. "
+                    "Return only the required PlanOutputFormat structured output."
+                )
             )
-        )
 
-        request_id = runtime.tool_call_id
-        planner_config = multi_agent_runtime.make_child_config(
-            parent_config=getattr(runtime, "config", None),
-            agent_name="planner",
-            request_id=request_id,
-        )
-        plan_state, message_ref = multi_agent_runtime.invoke_agent(
-            agent_name="planner",
-            graph_input={
-                "messages": coder_msgs_sanitization + [planner_instruction],
-            },
-            request_id=request_id,
-            config=planner_config,
-        )
-
-        plan = _coerce_plan(plan_state)
-        plan_required = bool(plan.get("plan_required", False))
-        plan_context = (
-            _format_plan(plan)
-            if plan_required
-            else (
-                "No executable plan was produced. Either the user quit plan generation "
-                "or the planner returned plan_required=False."
+            request_id = runtime.tool_call_id
+            planner_config = multi_agent_runtime.make_child_config(
+                parent_config=getattr(runtime, "config", None),
+                agent_name="planner",
+                request_id=request_id,
             )
-        )
-        if message_ref is not None:
+            plan_state, message_ref = multi_agent_runtime.invoke_agent(
+                agent_name="planner",
+                graph_input={
+                    "messages": coder_msgs_sanitization + [planner_instruction],
+                },
+                request_id=request_id,
+                config=planner_config,
+            )
+
+            plan = _coerce_plan(plan_state)
+            plan_required = bool(plan.get("plan_required", False))
             plan_context = (
-                f"{plan_context}\n\n"
-                "# Saved subagent messages\n"
-                f"{message_ref.to_tool_hint()}"
+                _format_plan(plan)
+                if plan_required
+                else (
+                    "No executable plan was produced. Either the user quit plan generation "
+                    "or the planner returned plan_required=False."
+                )
             )
+            if message_ref is not None:
+                plan_context = (
+                    f"{plan_context}\n\n"
+                    "# Saved subagent messages\n"
+                    f"{message_ref.to_tool_hint()}"
+                )
 
-        update = {
-            "messages": [ToolMessage(content=plan_context, tool_call_id=runtime.tool_call_id)]
-        }
+            update = {
+                "messages": [ToolMessage(content=plan_context, tool_call_id=runtime.tool_call_id)]
+            }
 
-        if plan:
-            update["plan"] = plan
+            if plan:
+                update["plan"] = plan
 
-        return Command(update=update)
+            return Command(update=update)
+        except Exception as exc:
+            return tool_error_command(
+                exc,
+                tool_call_id=runtime.tool_call_id,
+                hint="Planner subagent failed. Retry write_plan with a clearer objective or inspect logs.",
+            )
     
 
 
@@ -312,87 +320,94 @@ class AdvanceChecklist(BaseTool):
     args_schema: type[BaseModel] = AdvanceChecklistInput
 
     def _run(self, runtime: ToolRuntime):
-        plan = runtime.state.get("plan", {})
-        original_checklist = plan.get("checklist", [])
+        try:
+            plan = runtime.state.get("plan", {})
+            original_checklist = plan.get("checklist", [])
 
-        if not original_checklist:
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            content="No plan checklist exists. Create a plan before advancing it.",
-                            tool_call_id=runtime.tool_call_id,
-                        )
-                    ]
-                }
+            if not original_checklist:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content="No plan checklist exists. Create a plan before advancing it.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            checklist = _coerce_checklist(original_checklist)
+
+            active_indices = [
+                idx for idx, step in enumerate(checklist)
+                if step.get("status") == "in_progress"
+            ]
+
+            if len(active_indices) > 1:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content=(
+                                    "Checklist has more than one 'in_progress' step. "
+                                    "Use update_checklist to fix statuses before advancing:\n\n"
+                                    f"{_format_checklist(checklist)}"
+                                ),
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            if not active_indices:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content=(
+                                    "Checklist has no 'in_progress' step to advance. "
+                                    "Use update_checklist to mark the active step before advancing."
+                                ),
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            completed_step_index = active_indices[0]
+
+            next_pending_index = next(
+                (
+                    idx for idx, step in enumerate(checklist[completed_step_index + 1:], start=completed_step_index + 1)
+                    if step.get("status") == "pending"
+                ),
+                None,
             )
 
-        checklist = _coerce_checklist(original_checklist)
+            checklist[completed_step_index]["status"] = "completed"
+            if next_pending_index is not None:
+                checklist[next_pending_index]["status"] = "in_progress"
 
-        active_indices = [
-            idx for idx, step in enumerate(checklist)
-            if step.get("status") == "in_progress"
-        ]
 
-        if len(active_indices) > 1:
+            verb = "completed" if next_pending_index is None else "advanced"
+
             return Command(
                 update={
+                    "plan": {
+                        **plan,
+                        "checklist": checklist,
+                    },
                     "messages": [
                         ToolMessage(
-                            content=(
-                                "Checklist has more than one 'in_progress' step. "
-                                "Use update_checklist to fix statuses before advancing:\n\n"
-                                f"{_format_checklist(checklist)}"
-                            ),
+                            content=f"Checklist {verb}:\n\n{_format_checklist(checklist)}",
                             tool_call_id=runtime.tool_call_id,
                         )
-                    ]
+                    ],
                 }
             )
-
-        if not active_indices:
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            content=(
-                                "Checklist has no 'in_progress' step to advance. "
-                                "Use update_checklist to mark the active step before advancing."
-                            ),
-                            tool_call_id=runtime.tool_call_id,
-                        )
-                    ]
-                }
+        except Exception as exc:
+            return tool_error_command(
+                exc,
+                tool_call_id=runtime.tool_call_id,
+                hint="Failed to advance checklist. Inspect the current plan/checklist state.",
             )
-
-        completed_step_index = active_indices[0]
-
-        next_pending_index = next(
-            (
-                idx for idx, step in enumerate(checklist[completed_step_index + 1:], start=completed_step_index + 1)
-                if step.get("status") == "pending"
-            ),
-            None,
-        )
-
-        checklist[completed_step_index]["status"] = "completed"
-        if next_pending_index is not None:
-            checklist[next_pending_index]["status"] = "in_progress"
-
-
-        verb = "completed" if next_pending_index is None else "advanced"
-
-        return Command(
-            update={
-                "plan": {
-                    **plan,
-                    "checklist": checklist,
-                },
-                "messages": [
-                    ToolMessage(
-                        content=f"Checklist {verb}:\n\n{_format_checklist(checklist)}",
-                        tool_call_id=runtime.tool_call_id,
-                    )
-                ],
-            }
-        )

@@ -35,6 +35,28 @@ def now_str() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def ok_response(**kwargs) -> dict[str, Any]:
+    return {"ok": True, **kwargs}
+
+
+def error_response(error: Exception | str, error_type: str | None = None, hint: str | None = None) -> dict[str, Any]:
+    if isinstance(error, Exception):
+        error_type = error_type or type(error).__name__
+        error_text = str(error)
+    else:
+        error_type = error_type or "Error"
+        error_text = error
+
+    out: dict[str, Any] = {
+        "ok": False,
+        "error_type": error_type,
+        "error": error_text,
+    }
+    if hint:
+        out["hint"] = hint
+    return out
+
+
 # -----------------------------------------------------------------------------
 # NotebookSession + kernel state
 # -----------------------------------------------------------------------------
@@ -69,6 +91,11 @@ class NotebookSession:
         self.kc.wait_for_ready(timeout=60)
         self.setup_executed = False
         self.created_scripts: list[str] = []
+        self.running_cell_index: int | None = None
+        self.execution_started_at: float | None = None
+        self.last_execution_ended_at: float | None = None
+        self.last_error: str | None = None
+        self.last_execution_count: int | None = None
 
         self.save()
 
@@ -96,6 +123,31 @@ class NotebookSession:
         self.kc.start_channels()
         self.kc.wait_for_ready(timeout=60)
         self.setup_executed = False
+        self.running_cell_index = None
+        self.execution_started_at = None
+        self.last_error = None
+
+    def interrupt_kernel(self) -> None:
+        if self.km is None:
+            raise RuntimeError("Kernel manager is not available.")
+        self.km.interrupt_kernel()
+
+    def status(self) -> dict[str, Any]:
+        is_alive = bool(self.km and self.km.is_alive())
+        return ok_response(
+            notebook_name=self.name,
+            notebook_path=str(self.path),
+            kernel_name=self.kernel_name,
+            kernel_alive=is_alive,
+            user_id=self.user_id,
+            session_id=self.session_id,
+            num_cells=len(self.nb.cells),
+            running_cell_index=self.running_cell_index,
+            execution_started_at=self.execution_started_at,
+            last_execution_ended_at=self.last_execution_ended_at,
+            last_execution_count=self.last_execution_count,
+            last_error=self.last_error,
+        )
 
     def save(self) -> None:
         with open(self.path, "w", encoding="utf-8") as f:
@@ -133,8 +185,24 @@ class NotebookSession:
         if index < 0 or index >= len(self.nb.cells):
             raise IndexError(f"Cell index {index} out of range (0..{len(self.nb.cells)-1})")
 
-    def insert_cell(self, index: int | None, cell_type: str, source: str) -> dict[str, Any]:
+    def _bioincoder_metadata(self, tool_name: str, status: str = "created") -> dict[str, Any]:
+        return {
+            "user_id": self.user_id,
+            "session_id": self.session_id,
+            "notebook_name": self.name,
+            "tool": tool_name,
+            "status": status,
+            "updated_at": now_str(),
+        }
+
+    def _stamp_cell(self, cell: Any, tool_name: str, status: str = "created") -> None:
+        metadata = dict(cell.get("metadata", {}))
+        metadata["bioincoder"] = self._bioincoder_metadata(tool_name=tool_name, status=status)
+        cell["metadata"] = metadata
+
+    def insert_cell(self, index: int | None, cell_type: str, source: str, tool_name: str = "jupytercode_insert_cell") -> dict[str, Any]:
         index = self._normalize_insert_index(index)
+        source = strip_code_fences(source) if cell_type == "code" else source
 
         if cell_type == "markdown":
             cell = new_markdown_cell(source)
@@ -143,49 +211,50 @@ class NotebookSession:
         else:
             raise ValueError("cell_type must be 'markdown' or 'code'")
 
+        self._stamp_cell(cell, tool_name=tool_name)
         self.nb.cells.insert(index, cell)
         self.save()
-        return {
-            "ok": True,
-            "cell_index": index,
-            "cell_type": cell_type,
-            "num_cells": len(self.nb.cells),
-        }
+        return ok_response(
+            cell_index=index,
+            cell_type=cell_type,
+            num_cells=len(self.nb.cells),
+        )
 
     def delete_cell(self, index: int) -> dict[str, Any]:
         self._require_index(index)
         deleted_type = self.nb.cells[index].cell_type
         del self.nb.cells[index]
         self.save()
-        return {
-            "ok": True,
-            "deleted_index": index,
-            "deleted_type": deleted_type,
-            "num_cells": len(self.nb.cells),
-        }
+        return ok_response(
+            deleted_index=index,
+            deleted_type=deleted_type,
+            num_cells=len(self.nb.cells),
+        )
     
     def read_cell(self, index: int) -> dict[str, Any]:
         self._require_index(index)
         cell = self.nb.cells[index]
-        return {
-            "ok": True,
-            "cell_index": index,
-            "cell_type": cell.cell_type,
-            "source": cell.source,
-            "output_preview": self._cell_output_preview(cell, 4000),
-            "execution_count": cell.get("execution_count"),
-        }
+        return ok_response(
+            cell_index=index,
+            cell_type=cell.cell_type,
+            source=cell.source,
+            output_preview=self._cell_output_preview(cell, 4000),
+            execution_count=cell.get("execution_count"),
+        )
 
     def overwrite_cell_source(self, index: int, source: str) -> dict[str, Any]:
         self._require_index(index)
+        if self.nb.cells[index].cell_type == "code":
+            source = strip_code_fences(source)
         self.nb.cells[index].source = source
         if self.nb.cells[index].cell_type == "code":
             self.nb.cells[index]["outputs"] = []
             self.nb.cells[index]["execution_count"] = None
+        self._stamp_cell(self.nb.cells[index], tool_name="jupytercode_overwrite_cell_source")
         self.save()
-        return {"ok": True, "cell_index": index}
+        return ok_response(cell_index=index)
 
-    def execute_cell(self, index: int) -> dict[str, Any]:
+    def execute_cell(self, index: int, timeout_seconds: int | None = 1800) -> dict[str, Any]:
         self._require_index(index)
         cell = self.nb.cells[index]
         if cell.cell_type != "code":
@@ -205,52 +274,113 @@ class NotebookSession:
         except Exception:
             pass
 
-        result = self._execute_source(source)
+        self.running_cell_index = index
+        self.execution_started_at = time.time()
+        self.last_error = None
 
-        # Clear the running signal
         try:
-            running_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+            result = self._execute_source(source, timeout_seconds=timeout_seconds)
+        except Exception as exc:
+            result = self._execution_exception_result(exc)
+        finally:
+            # Clear the running signal
+            try:
+                running_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        self.running_cell_index = None
+        self.last_execution_ended_at = time.time()
+        self.last_error = result.get("error")
+        self.last_execution_count = result["execution_count"]
 
         cell["outputs"] = result["outputs"]
         cell["execution_count"] = result["execution_count"]
+        self._stamp_cell(
+            cell,
+            tool_name="jupytercode_execute_cell",
+            status="ok" if result["ok"] else "error",
+        )
         self.save()
 
-        out = {
-            "ok": result["ok"],
-            "cell_index": index,
-            "execution_count": result["execution_count"],
-            "output_preview": result["preview"],
-            "error": result.get("error"),
-        }
+        out = ok_response(
+            cell_index=index,
+            execution_count=result["execution_count"],
+            output_preview=result["preview"],
+            error=result.get("error"),
+            timed_out=result.get("timed_out", False),
+        )
+        out["ok"] = result["ok"]
 
         return out
 
-    def insert_execute_code_cell(self, index: int | None, source: str) -> dict[str, Any]:
-        inserted = self.insert_cell(index=index, cell_type="code", source=source)
+    def _execution_exception_result(self, exc: Exception) -> dict[str, Any]:
+        error_text = f"{type(exc).__name__}: {exc}"
+        outputs = [
+            new_output(
+                output_type="error",
+                ename=type(exc).__name__,
+                evalue=str(exc),
+                traceback=[error_text],
+            )
+        ]
+        return {
+            "ok": False,
+            "outputs": outputs,
+            "execution_count": None,
+            "preview": error_text,
+            "error": error_text,
+            "timed_out": False,
+        }
+
+    def insert_execute_code_cell(self, index: int | None, source: str, timeout_seconds: int | None = 1800) -> dict[str, Any]:
+        inserted = self.insert_cell(
+            index=index,
+            cell_type="code",
+            source=source,
+            tool_name="jupytercode_insert_execute_code_cell",
+        )
         idx = inserted["cell_index"]
-        executed = self.execute_cell(idx)
-        out = {
-            "ok": executed["ok"],
-            "cell_index": idx,
-            "execution_count": executed["execution_count"],
-            "output_preview": executed["output_preview"],
-            "error": executed.get("error"),
-        }
+        executed = self.execute_cell(idx, timeout_seconds=timeout_seconds)
+        out = ok_response(
+            cell_index=idx,
+            execution_count=executed["execution_count"],
+            output_preview=executed["output_preview"],
+            error=executed.get("error"),
+            timed_out=executed.get("timed_out", False),
+        )
+        out["ok"] = executed["ok"]
 
         return out
 
-    def _execute_source(self, source: str) -> dict[str, Any]:
+    def _execute_source(self, source: str, timeout_seconds: int | None = 1800) -> dict[str, Any]:
         msg_id = self.kc.execute(source, allow_stdin=False, stop_on_error=True)
 
         outputs = []
         execution_count = None
         error_text = None
+        timed_out = False
+        started = time.monotonic()
+        timeout_enabled = timeout_seconds is not None and timeout_seconds > 0
 
         while True:
+            if timeout_enabled and time.monotonic() - started > timeout_seconds:
+                timed_out = True
+                error_text = f"Cell execution timed out after {timeout_seconds} seconds."
+                try:
+                    self.interrupt_kernel()
+                except Exception as exc:
+                    error_text += f" Kernel interrupt failed: {exc}"
+                outputs.append(new_output(
+                    output_type="error",
+                    ename="TimeoutError",
+                    evalue=error_text,
+                    traceback=[error_text],
+                ))
+                break
+
             try:
-                msg = self.kc.get_iopub_msg(timeout=10)
+                msg = self.kc.get_iopub_msg(timeout=1)
             except queue.Empty:
                 continue
             if msg.get("parent_header", {}).get("msg_id") != msg_id:
@@ -311,6 +441,7 @@ class NotebookSession:
             "execution_count": execution_count,
             "preview": preview,
             "error": error_text,
+            "timed_out": timed_out,
         }
 
     @staticmethod
@@ -374,11 +505,30 @@ class NotebookRegistry:
         if name in self.nb_collections:
             notebook = self.nb_collections[name]
             if str(notebook.path) == str(Path(notebook_path).resolve()):
+                if (
+                    self.user_id is not None
+                    and notebook.user_id is not None
+                    and self.user_id != notebook.user_id
+                ):
+                    raise PermissionError(
+                        f"Notebook session '{name}' belongs to user_id={notebook.user_id}, "
+                        f"but current registry user_id={self.user_id}."
+                    )
+                if (
+                    self.session_id is not None
+                    and notebook.session_id is not None
+                    and self.session_id != notebook.session_id
+                ):
+                    raise PermissionError(
+                        f"Notebook session '{name}' belongs to session_id={notebook.session_id}, "
+                        f"but current registry session_id={self.session_id}."
+                    )
                 return notebook
             else:
-                notebook.shutdown()
-                del self.nb_collections[name]
-                return "The name and notebook_path provided were not match. The notebook is shutdown."
+                raise ValueError(
+                    f"Notebook session name '{name}' is already bound to {notebook.path}, "
+                    f"not {Path(notebook_path).resolve()}. Use a different name or shut down the old session first."
+                )
 
         else:
             notebook = NotebookSession(
@@ -396,6 +546,9 @@ class NotebookRegistry:
             raise ValueError(f"No notebook session named '{name}' to shutdown")
         else:
             self.nb_collections[name].shutdown()
+            del self.nb_collections[name]
+            if self.current and self.current.name == name:
+                self.current = None
 
     def current_notebook(self, name: str) -> NotebookSession:
         if name not in self.nb_collections:
@@ -423,6 +576,23 @@ class NotebookRegistry:
         if name in self.nb_collections and not overwrite:
             raise ValueError(f"Notebook session '{name}' is already registered.")
         self.nb_collections[name] = session
+
+    def control(self, name: str, action: str) -> dict[str, Any]:
+        if action == "status":
+            return self.current_notebook(name).status()
+        if action == "interrupt":
+            session = self.current_notebook(name)
+            session.interrupt_kernel()
+            return ok_response(action=action, notebook_name=name)
+        if action == "restart":
+            session = self.current_notebook(name)
+            session.restart_kernel()
+            return ok_response(action=action, notebook_name=name, notebook_path=str(session.path))
+        if action == "shutdown":
+            self.shutdown_notebook(name)
+            return ok_response(action=action, notebook_name=name)
+
+        raise ValueError("action must be one of: status, interrupt, restart, shutdown")
 
 
 
@@ -531,23 +701,10 @@ def jupytercode_kernel_selection() -> str:
 @tool
 def jupytercode_notebooks_info() -> str:
     """
-    List all currently registered notebook sessions.
+    List registered notebook sessions with path, kernel, user_id, and session_id.
 
-    Use this tool when you need to know:
-    - which notebook sessions already exist
-    - the notebook path for each session
-    - which kernel is attached to each session
-
-    This tool is useful before choosing a notebook session name for later operations.
-
-    Do NOT use this tool to inspect notebook cell contents.
-    To inspect notebook structure or cell outputs, use `jupytercode_read_notebook` instead.
-
-    Returns:
-        A string containing:
-            - notebook_name: Session name
-            - notebook_path: Path to the notebook file
-            - notebook_kernel: Kernel name attached to the session
+    Use before choosing a notebook session name. This does not inspect cells;
+    use jupytercode_read_notebook for notebook contents.
     """
     if not JUPYTER_REGISTRY.nb_collections:
         return "No registered notebook session."
@@ -565,324 +722,154 @@ def jupytercode_notebooks_info() -> str:
 @tool
 def jupytercode_use_notebook(name: str, notebook_path: str, kernel_name: str) -> dict[str, Any]:
     """
-    Open or create a named Jupyter notebook session and make it available for later notebook operations.
+    Open or create a named notebook session with a live Jupyter kernel.
 
-    Use this tool first before reading cells, inserting cells, executing code, deleting cells,
-    or restarting the kernel for a notebook session.
-    
-    Behavior:
-    - If the notebook file already exists, it will be loaded.
-    - If the notebook file does not exist, a new notebook file will be created.
-    - A live Jupyter kernel will be started for this notebook session.
-    - Later notebook tools should use the same `name` to operate on this session.
-
-    Recommended use cases:
-    - Start a new analysis notebook session.
-    - Re-open an existing notebook and continue working in it.
-    - Create a notebook-backed execution environment for iterative coding.
-
-    Do NOT use this tool if you only want to inspect a notebook session that is already open;
-    use the same `name` with the other notebook tools instead.
-
-    Args:
-        name: Unique name used to identify this notebook session in later tool calls.
-        notebook_path: Absolute or relative path to the target `.ipynb` notebook file.
-        kernel_name: Jupyter kernel name for this notebook session. You should check the jupyter kernel informations and package informations in kernel to choose proper kernel.
-
-    Returns:
-        A dictionary containing:
-        - ok: Whether the operation succeeded.
-        - notebook_name: Name of the notebook session.
-        - notebook_path: Resolved notebook file path.
-        - notebook_kernel: Kernel name associated with this session.
-        - num_cells: Current number of cells in the notebook.
+    Use before reading, editing, or executing cells. Existing session names are
+    reused only when path, user_id, and session_id are compatible.
+    Returns ok, notebook_name, notebook_path, notebook_kernel, user_id, session_id, num_cells.
     """
-    notebook = JUPYTER_REGISTRY.use_notebook(name, notebook_path, kernel_name)
-    out = {
-        "ok": True,
-        "notebook_name": name,
-        "notebook_path": str(notebook.path),
-        "notebook_kernel": kernel_name,
-        "user_id": notebook.user_id,
-        "session_id": notebook.session_id,
-        "num_cells": len(notebook.nb.cells),
-    }
-    return out
+    try:
+        notebook = JUPYTER_REGISTRY.use_notebook(name, notebook_path, kernel_name)
+        return ok_response(
+            notebook_name=name,
+            notebook_path=str(notebook.path),
+            notebook_kernel=kernel_name,
+            user_id=notebook.user_id,
+            session_id=notebook.session_id,
+            num_cells=len(notebook.nb.cells),
+        )
+    except Exception as exc:
+        return error_response(exc, hint="Use a unique notebook name, or shut down the existing session first.")
 
 @tool
 def jupytercode_read_notebook(name: str) -> dict[str, Any]:
     """
-    Read a named notebook session and return a structured overview of all cells.
+    Read a notebook-level overview for an opened notebook session.
 
-    Use this tool before editing or executing cells when you need to understand:
-    - notebook structure
-    - existing code cells
-    - markdown notes
-    - recent outputs
-
-    This tool is especially useful for deciding where to insert new cells,
-    whether an existing cell should be modified, and what has already been executed.
-
-    Prefer this tool over reading cells one-by-one when you need a notebook-level overview.
-
-    Args:
-        name: Name of the notebook session to inspect.
-
-    Returns:
-        A dictionary containing:
-        - ok: Whether the operation succeeded.
-        - notebook_path: Path of the notebook file.
-        - num_cells: Total number of cells.
-        - cells: List of cell summaries, each including:
-            - index
-            - cell_type
-            - source_preview
-            - output_preview
+    Use before editing or executing when cell positions are uncertain.
+    Returns notebook metadata and cells with index, cell_type, source_preview, output_preview.
     """
-    return JUPYTER_REGISTRY.current_notebook(name).read_notebook()
+    try:
+        return JUPYTER_REGISTRY.current_notebook(name).read_notebook()
+    except Exception as exc:
+        return error_response(exc, hint="Open the notebook first with jupytercode_use_notebook.")
 
 @tool
 def jupytercode_read_cell(name: str, index: int) -> dict[str, Any]:
     """
-    Read one specific cell from a named notebook session.
+    Read one cell from an opened notebook session.
 
-    Use this tool when you need the full source and current output of a single cell
-    before deciding whether to modify it, execute it, or delete it.
-
-    This is the preferred tool when:
-    - you already know the target cell index
-    - you need full source code instead of only a preview
-    - you want to inspect the current output of one cell in detail
-
-    Args:
-        name: Name of the notebook session.
-        index: Zero-based index of the target cell.
-
-    Returns:
-        A dictionary containing:
-        - ok: Whether the operation succeeded.
-        - cell_index: Requested cell index.
-        - cell_type: `code` or `markdown`.
-        - source: Full source content of the cell.
-        - output_preview: Summarized preview of current outputs.
-        - execution_count: Execution count if the cell is a code cell.
+    Use when you need full source or output for a known cell index.
+    Returns ok, cell_index, cell_type, source, output_preview, execution_count.
     """
-    return JUPYTER_REGISTRY.current_notebook(name).read_cell(index)
+    try:
+        return JUPYTER_REGISTRY.current_notebook(name).read_cell(index)
+    except Exception as exc:
+        return error_response(exc, hint="Check the notebook name and cell index with jupytercode_read_notebook.")
 
 @tool
 def jupytercode_insert_cell(name: str, index: int | None, cell_type: str, source: str) -> dict[str, Any]:
     """
-    Insert a new cell into a named notebook session without executing it.
+    Insert a markdown or code cell without executing it.
 
-    Use this tool when you want to add notebook content first and execute later,
-    or when you want to add markdown explanations, notes, or code placeholders.
-
-    Important:
-    - This tool does NOT execute the new cell.
-    - If `index` is None, negative, or out of range, the cell will be appended to the end.
-    - the `cell_type` argument currently supports
-      both `markdown` and `code`. Use `markdown` for notes and explanations, and `code`
-      when you want to insert code without executing it yet.
-
-    Good use cases:
-    - Add markdown notes that explain an analysis step.
-    - Insert a code cell draft before reviewing or editing it.
-    - Prepare a notebook structure before execution.
-
-    Args:
-        name: Name of the notebook session.
-        index: Position where the new cell should be inserted. Use None to append.
-        cell_type: Type of the cell. Must be `markdown` or `code`.
-        source: Source content of the new cell.
-
-    Returns:
-        A dictionary containing:
-        - ok: Whether the operation succeeded.
-        - cell_index: Index of the inserted cell.
-        - cell_type: Inserted cell type.
-        - num_cells: Updated number of cells in the notebook.
+    Use index=None to append. cell_type must be "markdown" or "code".
+    Returns ok, cell_index, cell_type, num_cells.
     """
-    session = JUPYTER_REGISTRY.current_notebook(name)
-    out = session.insert_cell(index=index, cell_type=cell_type, source=source)
-    return out
+    try:
+        session = JUPYTER_REGISTRY.current_notebook(name)
+        return session.insert_cell(index=index, cell_type=cell_type, source=source)
+    except Exception as exc:
+        return error_response(exc, hint="Open the notebook first and use cell_type='markdown' or 'code'.")
 
 @tool
-def jupytercode_execute_cell(name: str, index: int) -> dict[str, Any]:
+def jupytercode_execute_cell(name: str, index: int, timeout_seconds: int = 1800) -> dict[str, Any]:
     """
-    Execute one existing code cell in a named notebook session using that session's live Jupyter kernel.
+    Execute an existing code cell and save outputs back to the notebook.
 
-    Use this tool when:
-    - the target code already exists in the notebook
-    - you want to re-run a previously inserted or edited code cell
-    - you want the execution outputs to be recorded back into the notebook
-
-    Important:
-    - This tool only executes an existing cell.
-    - It does NOT insert a new cell.
-    - The target cell must be a code cell, not a markdown cell.
-    - Execution happens in the live kernel attached to this notebook session, so previously created
-      variables and objects in that session may still be available.
-
-    Prefer this tool over `jupytercode_insert_execute_code_cell` when the code is already in the notebook.
-    Prefer `jupytercode_insert_execute_code_cell` when you want to add a fresh code cell and run it immediately.
-
-    Args:
-        name: Name of the notebook session.
-        index: Zero-based index of the code cell to execute.
-
-    Returns:
-        A dictionary containing:
-        - ok: Whether execution succeeded.
-        - cell_index: Executed cell index.
-        - execution_count: Kernel execution count.
-        - output_preview: Summarized preview of outputs.
-        - error: Traceback summary if execution failed.
-        - paused_by_user: Whether execution was interrupted by the user.
+    Use for rerunning known code cells. Set timeout_seconds=0 for intentional long jobs.
+    Returns ok, cell_index, execution_count, output_preview, error, timed_out.
     """
-    session = JUPYTER_REGISTRY.current_notebook(name)
-    out = session.execute_cell(index=index)
-    return out
+    try:
+        session = JUPYTER_REGISTRY.current_notebook(name)
+        return session.execute_cell(index=index, timeout_seconds=timeout_seconds)
+    except Exception as exc:
+        return error_response(exc, hint="Check the cell index and kernel status with jupytercode_session_control(action='status').")
 
 @tool
-def jupytercode_insert_execute_code_cell(name: str, index: int | None, source: str) -> dict[str, Any]:
+def jupytercode_insert_execute_code_cell(name: str, index: int | None, source: str, timeout_seconds: int = 1800) -> dict[str, Any]:
     """
-    Insert a new code cell into a named notebook session and execute it immediately in that session's live kernel.
+    Insert a code cell and execute it immediately.
 
-    This is the main tool for iterative notebook coding.
-
-    Use this tool when you want to:
-    - add fresh code to the notebook
-    - run it right away
-    - record both the code and its outputs in the notebook
-
-    Important:
-    - The code is executed in the live kernel attached to this notebook session.
-    - Variables and objects created earlier in the same session may still exist and can be reused.
-    - The language of the code must match the session's kernel. For example:
-      - use Python code for a Python kernel
-      - use R code for an R kernel
-    - If you want to execute an existing cell instead of inserting a new one, use `jupytercode_execute_cell` if available.
-
-    Prefer this tool over plain cell insertion when you want immediate execution and recorded outputs.
-
-    Args:
-        name: Name of the notebook session.
-        index: Position to insert the new code cell. Use None to append to the end.
-        source: Source code to insert and execute. It should match the notebook session's kernel language.
-
-    Returns:
-        A dictionary containing:
-        - ok: Whether execution succeeded.
-        - cell_index: Index of the inserted cell.
-        - execution_count: Kernel execution count.
-        - output_preview: Summarized preview of outputs.
-        - error: Traceback summary if execution failed.
+    This is the main iterative analysis tool. Use index=None to append.
+    Code must match the notebook kernel language. Set timeout_seconds=0 for long jobs.
+    Returns ok, cell_index, execution_count, output_preview, error, timed_out.
     """
-    session = JUPYTER_REGISTRY.current_notebook(name)
-    inserted = session.insert_cell(index=index, cell_type="code", source=source)
-    executed = session.execute_cell(inserted["cell_index"])
-    out = {
-        "ok": executed["ok"],
-        "cell_index": inserted["cell_index"],
-        "execution_count": executed["execution_count"],
-        "output_preview": executed["output_preview"],
-        "error": executed.get("error"),
-    }
-    return out
+    try:
+        session = JUPYTER_REGISTRY.current_notebook(name)
+        return session.insert_execute_code_cell(
+            index=index,
+            source=source,
+            timeout_seconds=timeout_seconds,
+        )
+    except Exception as exc:
+        return error_response(exc, hint="Open the notebook first. Set timeout_seconds=0 for intentionally long-running code.")
 
 @tool
 def jupytercode_delete_cell(name: str, index: int) -> dict[str, Any]:
     """
-    Delete one cell from a named notebook session.
+    Delete one notebook cell by index.
 
-    Use this tool only when you are confident that the target cell should be removed.
-    Typical reasons include:
-    - the cell is no longer useful
-    - the cell contains failed or outdated code
-    - the notebook needs cleanup before continuing
-
-    Best practice:
-    - Prefer `jupytercode_read_notebook` or `jupytercode_read_cell` first if you are not fully sure.
-    - Avoid deleting cells that may still be needed for reproducibility or context.
-
-    Args:
-        name: Name of the notebook session.
-        index: Zero-based index of the cell to delete.
-
-    Returns:
-        A dictionary containing:
-        - ok: Whether the operation succeeded.
-        - deleted_index: Index of the deleted cell.
-        - deleted_type: Type of the deleted cell.
-        - num_cells: Updated total number of cells.
+    Use only after confirming the target with read_notebook or read_cell.
+    Returns ok, deleted_index, deleted_type, num_cells.
     """
-    session = JUPYTER_REGISTRY.current_notebook(name)
-    out = session.delete_cell(index=index)
-    return out
+    try:
+        session = JUPYTER_REGISTRY.current_notebook(name)
+        return session.delete_cell(index=index)
+    except Exception as exc:
+        return error_response(exc, hint="Read the notebook first to confirm the target cell index.")
 
 @tool
 def jupytercode_overwrite_cell_source(name: str, index: int, source: str) -> dict[str, Any]:
     """
-    Replace the source content of one existing cell in a named notebook session without executing it.
+    Replace one cell's source without executing it.
 
-    Use this tool when:
-    - an existing cell should be rewritten
-    - code or markdown needs to be corrected
-    - a failed cell should be edited before re-execution
-
-    Important:
-    - This tool only changes the cell source.
-    - It does NOT execute the cell.
-    - For code cells, previous outputs and execution count will be cleared after overwrite.
-
-    Recommended workflow:
-    1. Use `jupytercode_read_cell` first if you need to inspect the current source.
-    2. Use this tool to replace the source.
-    3. Use `execute_cell` if you want to run the updated code.
-
-    Args:
-        name: Name of the notebook session.
-        index: Zero-based index of the target cell.
-        source: New full source content for the cell.
-
-    Returns:
-        A dictionary containing:
-        - ok: Whether the operation succeeded.
-        - cell_index: Index of the modified cell.
+    For code cells, previous outputs and execution_count are cleared.
+    Use read_cell first when unsure. Returns ok, cell_index.
     """
-    session = JUPYTER_REGISTRY.current_notebook(name)
-    out = session.overwrite_cell_source(index=index, source=source)
-    return out
+    try:
+        session = JUPYTER_REGISTRY.current_notebook(name)
+        return session.overwrite_cell_source(index=index, source=source)
+    except Exception as exc:
+        return error_response(exc, hint="Read the target cell before overwriting it.")
+
+@tool
+def jupytercode_session_control(name: str, action: str) -> dict[str, Any]:
+    """
+    Inspect or control a notebook session.
+
+    action must be "status", "interrupt", "restart", or "shutdown".
+    Status returns kernel liveness, running cell, last execution, and notebook metadata.
+    """
+    try:
+        return JUPYTER_REGISTRY.control(name=name, action=action)
+    except Exception as exc:
+        return error_response(
+            exc,
+            hint="Use action='status', 'interrupt', 'restart', or 'shutdown'. Open the notebook first if needed.",
+        )
+
 
 @tool
 def jupytercode_restart_kernel(name: str) -> dict[str, Any]:
     """
-    Restart the live Jupyter kernel for a named notebook session.
+    Backward-compatible restart wrapper.
 
-    Use this tool when:
-    - the kernel state is corrupted
-    - variables should be cleared
-    - memory should be released
-    - the execution environment must be reset before continuing
-
-    Warning:
-    - Restarting the kernel clears all in-memory variables, objects, and session state
-      created in the current notebook kernel.
-    - Notebook cells and saved outputs remain in the notebook file, but live runtime state is lost.
-
-    Do NOT use this tool unless a reset is truly needed.
-
-    Args:
-        name: Name of the notebook session.
-
-    Returns:
-        A dictionary containing:
-        - ok: Whether the restart succeeded.
-        - notebook_path: Path of the notebook file associated with the restarted session.
+    Prefer jupytercode_session_control(name, action="restart").
     """
-    session = JUPYTER_REGISTRY.current_notebook(name)
-    session.restart_kernel()
-    return {"ok": True, "notebook_path": str(session.path)}
+    try:
+        return JUPYTER_REGISTRY.control(name=name, action="restart")
+    except Exception as exc:
+        return error_response(exc, hint="Prefer jupytercode_session_control(action='restart').")
 
 
 # -----------------------------------------------------------------------------
@@ -898,9 +885,8 @@ class JupyterCodeToolkit(BaseToolkit):
             jupytercode_read_notebook,
             jupytercode_read_cell,
             jupytercode_insert_cell,
-            jupytercode_execute_cell,
             jupytercode_insert_execute_code_cell,
             jupytercode_delete_cell,
             jupytercode_overwrite_cell_source,
-            jupytercode_restart_kernel
+            jupytercode_session_control,
         ]

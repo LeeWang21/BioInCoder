@@ -2,6 +2,7 @@ from typing import Literal
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
+from Tool_utils import tool_error_response
 
 
 class ReadAgentMessagesInput(BaseModel):
@@ -31,11 +32,19 @@ class ReadAgentMessages(BaseTool):
     def _run(self, channel_name: str, request_id: str, format: str = "prefix") -> str:
         from AgentConfigSetup import multi_agent_runtime
 
-        return multi_agent_runtime.read_messages_as_context(
-            channel_name=channel_name,
-            request_id=request_id,
-            format=format,
-        )
+        try:
+            return multi_agent_runtime.read_messages_as_context(
+                channel_name=channel_name,
+                request_id=request_id,
+                format=format,
+            )
+        except Exception as exc:
+            return str(
+                tool_error_response(
+                    exc,
+                    hint="Use list_saved_message_refs to find available channel_name/request_id pairs.",
+                )
+            )
 
 
 class ListSavedMessageRefsInput(BaseModel):
@@ -54,15 +63,19 @@ class ListSavedMessageRefs(BaseTool):
     args_schema: type[BaseModel] = ListSavedMessageRefsInput
 
     def _run(self, include_empty_channels: bool = False) -> dict:
-        from AgentConfigSetup import multi_agent_runtime
+        try:
+            from AgentConfigSetup import multi_agent_runtime
 
-        channels = {}
-        for channel_name, requests in multi_agent_runtime.message_container.channels.items():
-            if requests or include_empty_channels:
-                channels[channel_name] = list(requests.keys())
+            channels = {}
+            for channel_name, requests in multi_agent_runtime.message_container.channels.items():
+                if requests or include_empty_channels:
+                    channels[channel_name] = list(requests.keys())
 
-        return {
-            "user_id": multi_agent_runtime.message_container.config.user_id,
-            "session_id": multi_agent_runtime.message_container.config.session_id,
-            "channels": channels,
-        }
+            return {
+                "ok": True,
+                "user_id": multi_agent_runtime.message_container.config.user_id,
+                "session_id": multi_agent_runtime.message_container.config.session_id,
+                "channels": channels,
+            }
+        except Exception as exc:
+            return tool_error_response(exc)
