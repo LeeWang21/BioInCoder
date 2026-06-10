@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -35,6 +36,17 @@ SOURCE_BASE_URLS = {
     "europepmc": "https://www.ebi.ac.uk/europepmc/webservices/rest",
     "openalex": "https://api.openalex.org",
     "semantic_scholar": "https://api.semanticscholar.org",
+}
+SOURCE_ALIASES = {
+    "bioarxiv": "biorxiv",
+    "bio_rxiv": "biorxiv",
+    "med_rxiv": "medrxiv",
+    "ncbi": "ncbi_entrez",
+    "entrez": "ncbi_entrez",
+    "europe_pmc": "europepmc",
+    "europe-pmc": "europepmc",
+    "semantic-scholar": "semantic_scholar",
+    "semanticscholar": "semantic_scholar",
 }
 
 
@@ -160,6 +172,22 @@ def _compact(value: Any, max_items: int, max_depth: int, max_string: int) -> Any
     return value
 
 
+def _request_summary(config: dict[str, Any], final_url: str, raw_output_path: str | None) -> dict[str, Any]:
+    return {
+        "url": final_url,
+        "url_without_query": config["url"],
+        "params": _compact(config["params"], max_items=50, max_depth=3, max_string=1000),
+        "param_keys": list(config["params"].keys()),
+        "json_body": _compact(config["json_body"], max_items=30, max_depth=3, max_string=1000)
+        if config["json_body"] is not None
+        else None,
+        "form_body": _compact(config["form_body"], max_items=30, max_depth=3, max_string=1000)
+        if config["form_body"] is not None
+        else None,
+        "saved_raw": bool(raw_output_path),
+    }
+
+
 def _safe_raw_output_path(raw_output_path: str | None, base_url: str, suffix: str) -> Path:
     root = Path.cwd() / "artifacts" / "search"
     root.mkdir(parents=True, exist_ok=True)
@@ -183,6 +211,7 @@ def _safe_raw_output_path(raw_output_path: str | None, base_url: str, suffix: st
 def _normalize_request(payload: dict[str, Any]) -> dict[str, Any]:
     source = _require_str("source", payload.get("source")) or "custom"
     source_key = source.lower().replace("-", "_")
+    source_key = SOURCE_ALIASES.get(source_key, source_key)
     base_url = _require_str("base_url", payload.get("base_url"))
     path = _require_str("path", payload.get("path"))
 
@@ -235,7 +264,7 @@ def _normalize_request(payload: dict[str, Any]) -> dict[str, Any]:
         "form_body": _require_dict("form_body", form_body) if form_body is not None else None,
         "record_path": _require_str("record_path", payload.get("record_path")),
         "response_format": response_format,
-        "max_items": _positive_int("max_items", payload.get("max_items"), 10, maximum=50),
+        "max_items": _positive_int("max_items", payload.get("max_items"), 20, maximum=100),
         "max_depth": _positive_int("max_depth", payload.get("max_depth"), 4, maximum=8),
         "max_string": _positive_int("max_string", payload.get("max_string"), 500, maximum=3000),
         "text_head_chars": _positive_int("text_head_chars", payload.get("text_head_chars"), 2500, maximum=12000),
@@ -324,11 +353,7 @@ class AcademicRestRequest(BaseTool):
                     "content_type": content_type,
                     "record_path": path_used,
                     "raw_output_path": raw_output_path,
-                    "request_summary": {
-                        "url_without_query": config["url"],
-                        "param_keys": list(params.keys()),
-                        "saved_raw": bool(raw_output_path),
-                    },
+                    "request_summary": _request_summary(config, url, raw_output_path),
                     "warnings": [],
                 }
 
@@ -376,11 +401,7 @@ class AcademicRestRequest(BaseTool):
                 "raw_output_path": raw_output_path,
                 "text_head": None if raw_output_path else text_head,
                 "text_head_truncated": len(raw_text) > len(text_head),
-                "request_summary": {
-                    "url_without_query": config["url"],
-                    "param_keys": list(params.keys()),
-                    "saved_raw": bool(raw_output_path),
-                },
+                "request_summary": _request_summary(config, url, raw_output_path),
                 "warnings": [],
             }
         except HTTPError as exc:
@@ -440,9 +461,12 @@ class AcademicSearch(BaseTool):
             search_instruction = HumanMessage(
                 content=(
                     "Perform an academic search for the following objective.\n\n"
+                    f"# Current date\n{date.today().isoformat()}\n\n"
                     f"# Objective\n{objective}\n\n"
                     "Use available search skills to construct database-specific JSON requests. "
                     "Choose appropriate sources and result depth from the objective and current context. "
+                    "When the search involves recency or a date window, calculate exact date ranges from the current date above. "
+                    "For literature retrieval, return a reasonably broad result set instead of stopping at only a few papers. "
                     "Use academic_rest_request for retrieval. "
                     "Return a concise evidence-oriented answer with source names, IDs/URLs/DOIs when available, "
                     "and note unresolved uncertainty. Do not fabricate papers or identifiers."

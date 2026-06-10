@@ -12,9 +12,31 @@ Use this skill when SearchAgent needs to construct JSON for `academic_rest_reque
 
 The tool is intentionally flexible. Choose the database first, then write one compact JSON object.
 
+Allowed academic API hosts:
+
+- `https://eutils.ncbi.nlm.nih.gov/entrez/eutils`
+- `https://www.ebi.ac.uk/europepmc/webservices/rest`
+- `https://api.biorxiv.org`
+- `https://export.arxiv.org/api`
+- `https://api.openalex.org`
+- `https://api.semanticscholar.org`
+
+Accepted source aliases include:
+
+- `pubmed`, `ncbi_entrez`, `ncbi`, `entrez`
+- `biorxiv`, `bioarxiv`, `bio_rxiv`
+- `medrxiv`, `med_rxiv`
+- `arxiv`
+- `europepmc`, `europe_pmc`
+- `openalex`
+- `semantic_scholar`, `semanticscholar`
+
 General rules:
 
-- Prefer small result windows: `retmax`, `pageSize`, `rows`, `size`, or `limit` around 5-10.
+- For literature retrieval, prefer result windows around 20 records by default.
+- Use larger windows or multiple requests when the objective needs broad coverage, recent literature, method comparison, or review-style retrieval.
+- Use small windows only for targeted identifier lookup, DOI lookup, or quick verification.
+- When the objective involves recency or a relative time expression, use the runtime current date and convert it to exact date ranges.
 - Use database-supported filters instead of broad free-text dumps.
 - Use `record_path` for JSON APIs when the useful results are nested.
 - Use `response_format: "text"` or `"xml"` for XML APIs such as arXiv Atom.
@@ -36,11 +58,11 @@ Base shortcut:
     "db": "pubmed",
     "term": "KRAS AND colorectal cancer",
     "retmode": "json",
-    "retmax": 10,
+    "retmax": 20,
     "sort": "relevance"
   },
   "record_path": "esearchresult.idlist",
-  "max_items": 10
+  "max_items": 20
 }
 ```
 
@@ -56,7 +78,7 @@ Follow up IDs with `esummary`:
     "retmode": "json"
   },
   "record_path": "result",
-  "max_items": 10
+  "max_items": 20
 }
 ```
 
@@ -65,7 +87,7 @@ Useful PubMed query tags:
 - title/abstract: `single-cell[Title/Abstract]`
 - author: `Smith J[Author]`
 - journal: `Nature[Jour]`
-- publication date: `2020:2026[pdat]`
+- publication date: `2020:2026[pdat]`; for recent searches, use exact years calculated from the runtime current date
 - organism: `human[MeSH Terms]` or `mouse[MeSH Terms]`
 
 ## Europe PMC
@@ -79,11 +101,11 @@ Use for life-science literature across PubMed, PMC, preprints, DOI, and open-acc
   "params": {
     "query": "single-cell RNA-seq pancreatic cancer",
     "format": "json",
-    "pageSize": 10,
+    "pageSize": 20,
     "sort": "RELEVANCE"
   },
   "record_path": "resultList.result",
-  "max_items": 10
+  "max_items": 20
 }
 ```
 
@@ -96,10 +118,10 @@ Date-limited example:
   "params": {
     "query": "(spatial transcriptomics) AND FIRST_PDATE:[2023-01-01 TO 2026-12-31]",
     "format": "json",
-    "pageSize": 10
+    "pageSize": 20
   },
   "record_path": "resultList.result",
-  "max_items": 10
+  "max_items": 20
 }
 ```
 
@@ -114,7 +136,7 @@ Recent bioRxiv details:
   "source": "biorxiv",
   "path": "details/biorxiv/2026-01-01/2026-01-31/0/json",
   "record_path": "collection",
-  "max_items": 10
+  "max_items": 20
 }
 ```
 
@@ -136,7 +158,7 @@ medRxiv uses the same host with `medrxiv` in the path:
   "source": "medrxiv",
   "path": "details/medrxiv/2026-01-01/2026-01-31/0/json",
   "record_path": "collection",
-  "max_items": 10
+  "max_items": 20
 }
 ```
 
@@ -155,13 +177,13 @@ arXiv returns Atom XML. Use `response_format: "xml"` and summarize from `text_he
   "params": {
     "search_query": "all:single cell RNA seq AND cat:q-bio.GN",
     "start": 0,
-    "max_results": 10,
+    "max_results": 20,
     "sortBy": "relevance",
     "sortOrder": "descending"
   },
   "response_format": "xml",
-  "text_head_chars": 8000,
-  "max_items": 10
+  "text_head_chars": 12000,
+  "max_items": 20
 }
 ```
 
@@ -182,10 +204,10 @@ Use for broad scholarly lookup, DOI/title search, and cross-disciplinary metadat
   "path": "works",
   "params": {
     "search": "spatial transcriptomics tumor microenvironment",
-    "per-page": 10
+    "per-page": 20
   },
   "record_path": "results",
-  "max_items": 10
+  "max_items": 20
 }
 ```
 
@@ -199,11 +221,11 @@ Use for broad paper lookup and citation context. Keep requests small.
   "path": "graph/v1/paper/search",
   "params": {
     "query": "single cell RNA-seq pancreatic cancer",
-    "limit": 10,
+    "limit": 20,
     "fields": "title,authors,year,venue,url,abstract,externalIds,citationCount"
   },
   "record_path": "data",
-  "max_items": 10
+  "max_items": 20
 }
 ```
 
