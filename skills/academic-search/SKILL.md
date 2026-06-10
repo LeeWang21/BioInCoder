@@ -260,6 +260,16 @@ Include:
 - URL;
 - one short relevance note.
 
+Browser handoff requirements:
+
+- Return a usable URL whenever possible.
+- For DOI records, include `https://doi.org/<doi>`.
+- For PubMed records, include PMID and PubMed URL when possible.
+- For PMC records, include PMCID and PMC URL when possible.
+- For arXiv records, include abstract URL and PDF URL when possible.
+- For bioRxiv/medRxiv records, include DOI and page URL when possible.
+- If no URL can be recovered, say which identifier is available and what follow-up request is needed.
+
 Mention when:
 
 - results are preprints;

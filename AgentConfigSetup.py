@@ -9,10 +9,16 @@ from Message_tools import ReadAgentMessages, ListSavedMessageRefs
 from Skill_tool import SkillTool, generate_skill_tool_prompt
 from Todo_tools import WritePlan, UpdateChecklist, AdvanceChecklist
 from LLM import llm
-from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BIOINCODER_PROMPT
+from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, BIOINCODER_PROMPT
 from Runtime import MultiAgentRuntime
 from jupytercode_tool import JupyterCodeToolkit, JUPYTER_REGISTRY
 from Search_tools import AcademicRestRequest, AcademicSearch
+from Browser_tools import (
+    AgentBrowserCommand,
+    AgentBrowserHelp,
+    BrowserBrowse,
+    CloakBrowserConfig,
+)
 
 from langchain_community.tools import ShellTool
 from langgraph.checkpoint.memory import InMemorySaver
@@ -105,6 +111,10 @@ agent_registry.register_tool(name="Read_agent_messages", tool=ReadAgentMessages(
 agent_registry.register_tool(name="List_saved_message_refs", tool=ListSavedMessageRefs())
 agent_registry.register_tool(name="Academic_rest_request", tool=AcademicRestRequest())
 agent_registry.register_tool(name="Academic_search", tool=AcademicSearch())
+agent_registry.register_tool(name="Agent_browser_command", tool=AgentBrowserCommand())
+agent_registry.register_tool(name="Agent_browser_help", tool=AgentBrowserHelp())
+agent_registry.register_tool(name="Cloakbrowser_config", tool=CloakBrowserConfig())
+agent_registry.register_tool(name="Browser_browse", tool=BrowserBrowse())
 
 for tool in JupyterCodeToolkit().get_tools():
     agent_registry.register_tool(name=tool.name, tool=tool)
@@ -131,7 +141,13 @@ Plan_AgentConfig = AgentConfig(
 )
 
 #Search_AgentConfig
-tools_for_search = ["Skill_tool", "Academic_rest_request"]
+tools_for_search = [
+    "Ask_user_tool",
+    "Skill_tool",
+    "Read_agent_messages",
+    "List_saved_message_refs",
+    "Academic_rest_request",
+]
 
 SKILL_PROMPT_FOR_SEARCH = generate_skill_tool_prompt() if "Skill_tool" in tools_for_search else ""
 
@@ -144,6 +160,28 @@ Search_AgentConfig = AgentConfig(
     tool_names = tools_for_search,
 )
 
+#Browser_AgentConfig
+tools_for_browser = [
+    "Ask_user_tool",
+    "Skill_tool",
+    "Read_agent_messages",
+    "List_saved_message_refs",
+    "Agent_browser_help",
+    "Cloakbrowser_config",
+    "Agent_browser_command",
+]
+
+SKILL_PROMPT_FOR_BROWSER = generate_skill_tool_prompt() if "Skill_tool" in tools_for_browser else ""
+
+Browser_AgentConfig = AgentConfig(
+    agent_name = "browser",
+    description = "The browser subagent responsible for web browsing with agent-browser CLI and cloakbrowser in BioInCoder system",
+    channel = "Browser_Channel",
+    model = llm,
+    system_prompt = BROWSER_PROMPT + SKILL_PROMPT_FOR_BROWSER,
+    tool_names = tools_for_browser,
+)
+
 #BioInCoder_AgentConfig
 tools_for_Coder = [
     "Ask_user_tool",
@@ -152,6 +190,7 @@ tools_for_Coder = [
     "Read_agent_messages",
     "List_saved_message_refs",
     "Academic_search",
+    "Browser_browse",
     "Write_plan",
     "Update_checklist",
     "Advance_checklist",
@@ -180,7 +219,7 @@ BioInCoder_AgentConfig = AgentConfig(
 )
 
 #register agent
-for config in [BioInCoder_AgentConfig, Plan_AgentConfig, Search_AgentConfig]:
+for config in [BioInCoder_AgentConfig, Plan_AgentConfig, Search_AgentConfig, Browser_AgentConfig]:
     agent_registry.register_agent(config)
 
 
