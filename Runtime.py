@@ -149,10 +149,13 @@ class MultiAgentRuntime:
         agent_name: str,
         agent_state: Any,
         request_id: str | None = None,
+        input_message_count: int = 0,
     ) -> MessageRef:
         channel_name = self.get_agent_channel(agent_name)
         request_id = request_id or self.make_request_id(agent_name)
         messages = self.extract_messages(agent_state)
+        if input_message_count > 0 and len(messages) >= input_message_count:
+            messages = messages[input_message_count - 1:]
 
         return self.save_messages(
             channel_name=channel_name,
@@ -168,8 +171,12 @@ class MultiAgentRuntime:
         config: dict | None = None,
         request_id: str | None = None,
         save_messages: bool = True,
+        save_input_messages: bool = False,
     ) -> tuple[Any, MessageRef | None]:
         agent = self.get_agent(agent_name)
+        input_message_count = 0
+        if not save_input_messages and isinstance(graph_input, dict):
+            input_message_count = len(graph_input.get("messages") or [])
 
         if config is None:
             agent_state = agent.invoke(graph_input)
@@ -182,6 +189,7 @@ class MultiAgentRuntime:
                 agent_name=agent_name,
                 agent_state=agent_state,
                 request_id=request_id,
+                input_message_count=input_message_count,
             )
 
         return agent_state, message_ref

@@ -614,7 +614,7 @@ Avoid broad unfiltered searches that return noisy records.
 # Query construction
 
 Construct compact, explicit JSON requests.
-For literature retrieval, prefer result windows around 20 records by default.
+For literature retrieval, prefer result windows around 50 records by default.
 Use larger windows or multiple requests when the objective asks for broad coverage, review-style retrieval, recent papers, or method comparison.
 Use smaller windows only for targeted identifier lookup or quick verification.
 Use source-supported date, field, and sort parameters when relevant.
@@ -648,7 +648,7 @@ Return a concise Markdown summary:
 State what was searched and which sources were used.
 
 ## Key Results
-List the most relevant records with identifiers and links.
+List enough relevant records to support the objective. For ordinary literature searches, return around 20-30 high-signal records when available; for broad review-style tasks, return more and mention where the complete trace is saved.
 
 ## Notes / Limitations
 Mention preprint status, source limitations, failed requests, ambiguity, or whether more retrieval is needed.

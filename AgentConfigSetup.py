@@ -128,7 +128,6 @@ Plan_AgentConfig = AgentConfig(
     tool_names = tools_for_plan,
     middleware_names = middleware_for_plan,
     response_format = ToolStrategy(schema = PlanOutputFormat),
-    checkpointer = ckpt
 )
 
 #Search_AgentConfig
@@ -143,7 +142,6 @@ Search_AgentConfig = AgentConfig(
     model = llm,
     system_prompt = SEARCH_PROMPT + SKILL_PROMPT_FOR_SEARCH,
     tool_names = tools_for_search,
-    checkpointer = ckpt
 )
 
 #BioInCoder_AgentConfig

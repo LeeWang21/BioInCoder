@@ -33,7 +33,7 @@ Accepted source aliases include:
 
 General rules:
 
-- For literature retrieval, prefer result windows around 20 records by default.
+- For literature retrieval, prefer result windows around 50 records by default.
 - Use larger windows or multiple requests when the objective needs broad coverage, recent literature, method comparison, or review-style retrieval.
 - Use small windows only for targeted identifier lookup, DOI lookup, or quick verification.
 - When the objective involves recency or a relative time expression, use the runtime current date and convert it to exact date ranges.
@@ -58,11 +58,11 @@ Base shortcut:
     "db": "pubmed",
     "term": "KRAS AND colorectal cancer",
     "retmode": "json",
-    "retmax": 20,
+    "retmax": 50,
     "sort": "relevance"
   },
   "record_path": "esearchresult.idlist",
-  "max_items": 20
+  "max_items": 50
 }
 ```
 
@@ -78,7 +78,7 @@ Follow up IDs with `esummary`:
     "retmode": "json"
   },
   "record_path": "result",
-  "max_items": 20
+  "max_items": 50
 }
 ```
 
@@ -101,11 +101,11 @@ Use for life-science literature across PubMed, PMC, preprints, DOI, and open-acc
   "params": {
     "query": "single-cell RNA-seq pancreatic cancer",
     "format": "json",
-    "pageSize": 20,
+    "pageSize": 50,
     "sort": "RELEVANCE"
   },
   "record_path": "resultList.result",
-  "max_items": 20
+  "max_items": 50
 }
 ```
 
@@ -118,10 +118,10 @@ Date-limited example:
   "params": {
     "query": "(spatial transcriptomics) AND FIRST_PDATE:[2023-01-01 TO 2026-12-31]",
     "format": "json",
-    "pageSize": 20
+    "pageSize": 50
   },
   "record_path": "resultList.result",
-  "max_items": 20
+  "max_items": 50
 }
 ```
 
@@ -136,7 +136,7 @@ Recent bioRxiv details:
   "source": "biorxiv",
   "path": "details/biorxiv/2026-01-01/2026-01-31/0/json",
   "record_path": "collection",
-  "max_items": 20
+  "max_items": 50
 }
 ```
 
@@ -158,7 +158,7 @@ medRxiv uses the same host with `medrxiv` in the path:
   "source": "medrxiv",
   "path": "details/medrxiv/2026-01-01/2026-01-31/0/json",
   "record_path": "collection",
-  "max_items": 20
+  "max_items": 50
 }
 ```
 
@@ -177,13 +177,13 @@ arXiv returns Atom XML. Use `response_format: "xml"` and summarize from `text_he
   "params": {
     "search_query": "all:single cell RNA seq AND cat:q-bio.GN",
     "start": 0,
-    "max_results": 20,
+    "max_results": 50,
     "sortBy": "relevance",
     "sortOrder": "descending"
   },
   "response_format": "xml",
   "text_head_chars": 12000,
-  "max_items": 20
+  "max_items": 50
 }
 ```
 
@@ -204,10 +204,10 @@ Use for broad scholarly lookup, DOI/title search, and cross-disciplinary metadat
   "path": "works",
   "params": {
     "search": "spatial transcriptomics tumor microenvironment",
-    "per-page": 20
+    "per-page": 50
   },
   "record_path": "results",
-  "max_items": 20
+  "max_items": 50
 }
 ```
 
@@ -221,11 +221,11 @@ Use for broad paper lookup and citation context. Keep requests small.
   "path": "graph/v1/paper/search",
   "params": {
     "query": "single cell RNA-seq pancreatic cancer",
-    "limit": 20,
+    "limit": 50,
     "fields": "title,authors,year,venue,url,abstract,externalIds,citationCount"
   },
   "record_path": "data",
-  "max_items": 20
+  "max_items": 50
 }
 ```
 

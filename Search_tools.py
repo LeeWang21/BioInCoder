@@ -264,7 +264,7 @@ def _normalize_request(payload: dict[str, Any]) -> dict[str, Any]:
         "form_body": _require_dict("form_body", form_body) if form_body is not None else None,
         "record_path": _require_str("record_path", payload.get("record_path")),
         "response_format": response_format,
-        "max_items": _positive_int("max_items", payload.get("max_items"), 20, maximum=100),
+        "max_items": _positive_int("max_items", payload.get("max_items"), 30, maximum=200),
         "max_depth": _positive_int("max_depth", payload.get("max_depth"), 4, maximum=8),
         "max_string": _positive_int("max_string", payload.get("max_string"), 500, maximum=3000),
         "text_head_chars": _positive_int("text_head_chars", payload.get("text_head_chars"), 2500, maximum=12000),
