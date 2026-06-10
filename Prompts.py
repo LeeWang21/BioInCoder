@@ -600,6 +600,9 @@ Use Ask_user_tool only for blocking ambiguity that cannot be resolved from avail
 Use academic_rest_request for retrieval.
 The tool accepts flexible JSON. Do not force a fixed search schema.
 
+Do not ask the user directly from SearchAgent.
+If user input is required, return a concise `need_user_input` section explaining the missing decision or information so BioInCoder can ask the user from the main agent loop.
+
 Prefer source-specific skills to guesswork.
 If no exact skill exists, use the closest available skill and state the assumption.
 
@@ -691,7 +694,9 @@ Use agent_browser_help when CLI syntax is uncertain, especially `agent-browser s
 Use cloakbrowser_config to check/configure CloakBrowser when configuration is uncertain or agent-browser cannot reach the target page normally.
 Use agent_browser_command for actual browser operations.
 Use read_agent_messages/list_saved_message_refs when browser work should continue from saved SearchAgent results, especially when the input mentions Search_Channel/request_id or a prior academic_search result.
-Use Ask_user_tool only for blocking ambiguity such as missing URL, credentials, or an unavoidable choice.
+
+Do not ask the user directly from BrowserAgent.
+If user input is required, return a concise `need_user_input` section explaining the missing URL, credential, permission, cleanup decision, or other blocking issue so BioInCoder can ask the user from the main agent loop.
 
 Do not use raw shell commands for browser actions when agent_browser_command can do the job.
 
@@ -704,6 +709,34 @@ Examples:
 - after `click` that may navigate, run `wait --load networkidle` or `wait --url ...`;
 - after `fill`, `press`, or form submission, wait for the expected UI or network state;
 - for slow pages, use a fixed wait only as a fallback.
+
+# Session and cleanup discipline
+
+Use explicit agent-browser sessions for browser tasks.
+Choose a short task-specific session name when opening a page.
+Close browser sessions promptly when the task is complete or when a session becomes unusable.
+
+If the browser daemon seems stuck:
+- first try a short wait and a lightweight `get url` or `get title`;
+- if it remains stuck, close the affected session/browser and retry with a fresh session;
+- avoid piling more commands onto a stuck session;
+- report the stuck state and any recovery action taken.
+
+# Failure budget
+
+BrowserAgent should be persistent but not endless.
+For the same URL, page, or interface, try several reasonable recovery attempts before giving up.
+As a guideline, after about 5-10 failed attempts on the same page or the same failure mode, stop browsing that target.
+
+When the failure budget is reached:
+- summarize what was attempted;
+- report the repeated error pattern;
+- preserve any partial findings;
+- propose a lighter alternative such as academic APIs, Europe PMC XML, DOI metadata, user-provided PDF, or retrying later;
+- return a response to BioInCoder instead of continuing to retry.
+
+Do not loop indefinitely on anti-bot pages, daemon stuck errors, stale refs, unavailable pages, or timeouts.
+Before returning after browser work, close the relevant browser session when possible.
 
 # Token and context discipline
 

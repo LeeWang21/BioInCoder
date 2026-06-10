@@ -20,6 +20,7 @@ On the server, configure these environment variables if needed:
 - `BIOINCODER_CLOAKBROWSER_BIN`: cloakbrowser binary name or path. Default: `cloakbrowser`.
 - `BIOINCODER_CLOAKBROWSER_REQUIRED`: set to `1` to require CloakBrowser. Default: `1`.
 - `BIOINCODER_CLOAKBROWSER_AUTO_CONFIG`: set to `1` to let BioInCoder compute CloakBrowser env vars from the installed Python package. Default: `1`.
+- `BIOINCODER_BROWSER_HEADLESS`: set to `1` to append `--headless,--disable-gpu` to `AGENT_BROWSER_ARGS`. Default: `1`.
 - `AGENT_BROWSER_EXECUTABLE_PATH`: optional manual CloakBrowser binary path for agent-browser.
 - `AGENT_BROWSER_ARGS`: optional manual CloakBrowser stealth args for agent-browser.
 
@@ -40,6 +41,7 @@ CloakBrowser is required by default for BrowserAgent browsing.
 
 If auto-configuration fails, use the official cloakbrowser GitHub instructions and manually export the two `AGENT_BROWSER_*` env vars on the server.
 Only set `BIOINCODER_CLOAKBROWSER_REQUIRED=0` when ordinary agent-browser is explicitly acceptable.
+On headless Linux servers, keep `BIOINCODER_BROWSER_HEADLESS=1`; otherwise Chromium can fail with no X display and leave the agent-browser daemon stuck.
 
 ## Learn CLI Syntax
 
@@ -66,18 +68,23 @@ Use help for specific commands when needed:
 Open, wait, inspect, act, wait again:
 
 ```json
-{"args": ["open", "https://example.org"]}
+{"args": ["--session", "task_page", "open", "https://example.org"]}
 ```
 
 ```json
-{"args": ["wait", "--load", "networkidle"], "timeout_seconds": 180}
+{"args": ["--session", "task_page", "wait", "--load", "networkidle"], "timeout_seconds": 180}
 ```
 
 ```json
-{"args": ["snapshot", "-i"]}
+{"args": ["--session", "task_page", "snapshot", "-i"]}
 ```
 
 After any click, form submit, navigation, scroll, or dynamic action, wait again before reading state.
+When the task is done, close the session/browser:
+
+```json
+{"args": ["--session", "task_page", "close"]}
+```
 
 `agent_browser_command` truncates stdout/stderr by default to protect context. Use `max_output_chars` only when more output is genuinely needed.
 
@@ -86,13 +93,13 @@ After any click, form submit, navigation, scroll, or dynamic action, wait again 
 Navigation:
 
 ```json
-{"args": ["open", "https://example.org"]}
-{"args": ["wait", "--load", "networkidle"]}
-{"args": ["get", "url"]}
-{"args": ["get", "title"]}
-{"args": ["back"]}
-{"args": ["forward"]}
-{"args": ["reload"]}
+{"args": ["--session", "task_page", "open", "https://example.org"]}
+{"args": ["--session", "task_page", "wait", "--load", "networkidle"]}
+{"args": ["--session", "task_page", "get", "url"]}
+{"args": ["--session", "task_page", "get", "title"]}
+{"args": ["--session", "task_page", "back"]}
+{"args": ["--session", "task_page", "forward"]}
+{"args": ["--session", "task_page", "reload"]}
 ```
 
 Session/global options can be included in `args`:
@@ -101,6 +108,15 @@ Session/global options can be included in `args`:
 {"args": ["--session", "literature_page", "open", "https://example.org"]}
 {"args": ["--headed", "open", "https://example.org"]}
 ```
+
+Use explicit sessions by default. Pick short names tied to the task, such as:
+
+- `paper_page`
+- `dataset_page`
+- `docs_page`
+- `login_page`
+
+Avoid reusing stale sessions from unrelated tasks.
 
 Inspection:
 
@@ -176,6 +192,67 @@ Preferred waits:
 ```
 
 Use fixed waits only when load-state or element waits are insufficient.
+
+## Session Cleanup
+
+Always close the browser/session when:
+
+- the browser task is complete;
+- the page is stuck and recovery requires a fresh session;
+- authentication or sensitive content was opened;
+- the agent will switch to an unrelated website.
+
+Use:
+
+```json
+{"args": ["--session", "task_page", "close"]}
+```
+
+If several sessions may be open, inspect sessions first:
+
+```json
+{"args": ["session", "list"]}
+```
+
+Then close the relevant session.
+
+## Stuck Browser Daemon
+
+`The browser daemon seems stuck` usually means agent-browser's background daemon or controlled browser stopped responding.
+
+Common causes:
+
+- previous page is still loading or blocked by network/anti-bot checks;
+- a command is waiting on a load state that never resolves;
+- stale refs were used after navigation;
+- the browser session accumulated too much state;
+- CloakBrowser binary/env changed while daemon was already running;
+- too many sessions/pages were left open;
+- a prior command timed out and left the daemon in a bad state.
+
+Recovery pattern:
+
+1. Try a lightweight status check:
+
+```json
+{"args": ["--session", "task_page", "get", "url"], "timeout_seconds": 30}
+```
+
+2. Try a short wait:
+
+```json
+{"args": ["--session", "task_page", "wait", "3000"], "timeout_seconds": 30}
+```
+
+3. If still stuck, close the affected session/browser:
+
+```json
+{"args": ["--session", "task_page", "close"], "timeout_seconds": 30}
+```
+
+4. Start a fresh session and continue only from the minimum needed URL/context.
+
+Do not keep sending heavy snapshots or full-page extraction commands to a stuck session.
 
 ## Token-Minimal Browsing
 
@@ -264,6 +341,38 @@ If agent-browser is unavailable:
 
 - return the installation/configuration error from the tool;
 - do not pretend that browsing succeeded.
+
+Do not ask the user directly from BrowserAgent. If a blocking choice is needed, return a `need_user_input` section for BioInCoder to ask from the main agent loop.
+
+## Failure Budget
+
+Be persistent, but do not retry forever.
+
+For the same URL, page, interface, or repeated failure mode, allow several reasonable recovery attempts. As a guideline:
+
+- 5 attempts is enough for most repeated timeout, anti-bot, stale-ref, or daemon-stuck failures;
+- 10 attempts is the upper bound for important pages when different recovery strategies are being tried;
+- do not exceed this range unless the user explicitly requested exhaustive browser retries.
+
+Reasonable recovery strategies include:
+
+- wait longer;
+- use a fresh session;
+- close and reopen the session;
+- switch from full page browse to targeted `eval`;
+- use a lighter endpoint such as Europe PMC XML, DOI metadata, PubMed, or publisher metadata;
+- try a direct PDF/supplement link if already known.
+
+When the failure budget is reached:
+
+- stop browsing that target;
+- summarize what was tried;
+- report the failure pattern;
+- preserve partial findings;
+- suggest the next best route;
+- return a response to BioInCoder.
+
+Do not continue sending heavy snapshots, repeated opens, or full-page extraction commands after repeated failure.
 
 ## Response
 

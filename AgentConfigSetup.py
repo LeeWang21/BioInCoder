@@ -16,6 +16,7 @@ from Search_tools import AcademicRestRequest, AcademicSearch
 from Browser_tools import (
     AgentBrowserCommand,
     AgentBrowserHelp,
+    BrowserCleanup,
     BrowserBrowse,
     CloakBrowserConfig,
 )
@@ -114,6 +115,7 @@ agent_registry.register_tool(name="Academic_search", tool=AcademicSearch())
 agent_registry.register_tool(name="Agent_browser_command", tool=AgentBrowserCommand())
 agent_registry.register_tool(name="Agent_browser_help", tool=AgentBrowserHelp())
 agent_registry.register_tool(name="Cloakbrowser_config", tool=CloakBrowserConfig())
+agent_registry.register_tool(name="Browser_cleanup", tool=BrowserCleanup())
 agent_registry.register_tool(name="Browser_browse", tool=BrowserBrowse())
 
 for tool in JupyterCodeToolkit().get_tools():
@@ -142,7 +144,6 @@ Plan_AgentConfig = AgentConfig(
 
 #Search_AgentConfig
 tools_for_search = [
-    "Ask_user_tool",
     "Skill_tool",
     "Read_agent_messages",
     "List_saved_message_refs",
@@ -162,13 +163,13 @@ Search_AgentConfig = AgentConfig(
 
 #Browser_AgentConfig
 tools_for_browser = [
-    "Ask_user_tool",
     "Skill_tool",
     "Read_agent_messages",
     "List_saved_message_refs",
     "Agent_browser_help",
     "Cloakbrowser_config",
     "Agent_browser_command",
+    "Browser_cleanup",
 ]
 
 SKILL_PROMPT_FOR_BROWSER = generate_skill_tool_prompt() if "Skill_tool" in tools_for_browser else ""

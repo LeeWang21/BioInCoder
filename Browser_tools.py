@@ -18,6 +18,8 @@ AGENT_BROWSER_BIN = os.environ.get("BIOINCODER_AGENT_BROWSER_BIN", "agent-browse
 CLOAKBROWSER_BIN = os.environ.get("BIOINCODER_CLOAKBROWSER_BIN", "cloakbrowser")
 CLOAKBROWSER_REQUIRED = os.environ.get("BIOINCODER_CLOAKBROWSER_REQUIRED", "1") != "0"
 CLOAKBROWSER_AUTO_CONFIG = os.environ.get("BIOINCODER_CLOAKBROWSER_AUTO_CONFIG", "1") != "0"
+BROWSER_HEADLESS = os.environ.get("BIOINCODER_BROWSER_HEADLESS", "1") != "0"
+HEADLESS_AGENT_BROWSER_ARGS = ["--headless", "--disable-gpu"]
 BROWSER_ARTIFACT_DIR = Path.cwd() / "artifacts" / "browser"
 _CLOAKBROWSER_ENV_CACHE: dict[str, str] | None = None
 
@@ -63,6 +65,13 @@ ALLOWED_AGENT_BROWSER_COMMANDS = {
     "record",
     "skills",
 }
+
+
+def _extract_session_name(args: list[str]) -> str | None:
+    for index, arg in enumerate(args[:-1]):
+        if arg == "--session":
+            return args[index + 1]
+    return None
 
 
 def _positive_int(name: str, value: int | None, default: int, maximum: int) -> int:
@@ -112,6 +121,17 @@ def _agent_browser_prefix() -> list[str]:
     return [AGENT_BROWSER_BIN]
 
 
+def _merge_agent_browser_args(browser_args: str) -> str:
+    parts = [part.strip() for part in browser_args.split(",") if part.strip()]
+    if BROWSER_HEADLESS:
+        existing = set(parts)
+        for arg in HEADLESS_AGENT_BROWSER_ARGS:
+            if arg not in existing:
+                parts.append(arg)
+                existing.add(arg)
+    return ",".join(parts)
+
+
 def _resolve_cloakbrowser_env() -> dict[str, str]:
     global _CLOAKBROWSER_ENV_CACHE
 
@@ -120,7 +140,7 @@ def _resolve_cloakbrowser_env() -> dict[str, str]:
     if executable_path and browser_args:
         return {
             "AGENT_BROWSER_EXECUTABLE_PATH": executable_path,
-            "AGENT_BROWSER_ARGS": browser_args,
+            "AGENT_BROWSER_ARGS": _merge_agent_browser_args(browser_args),
         }
 
     if not CLOAKBROWSER_AUTO_CONFIG:
@@ -165,7 +185,7 @@ def _resolve_cloakbrowser_env() -> dict[str, str]:
 
     _CLOAKBROWSER_ENV_CACHE = {
         "AGENT_BROWSER_EXECUTABLE_PATH": binary,
-        "AGENT_BROWSER_ARGS": stealth_args,
+        "AGENT_BROWSER_ARGS": _merge_agent_browser_args(stealth_args),
     }
     return dict(_CLOAKBROWSER_ENV_CACHE)
 
@@ -223,6 +243,9 @@ class AgentBrowserCommand(BaseTool):
             )
             env_update = _resolve_cloakbrowser_env()
             out = _run_cli(_agent_browser_prefix() + args, timeout, env_update=env_update)
+            session_name = _extract_session_name(args)
+            if session_name:
+                out["session_name"] = session_name
             out["cloakbrowser_env_applied"] = bool(env_update)
             stdout, stdout_truncated = _truncate_text(out["stdout"], output_limit)
             stderr, stderr_truncated = _truncate_text(out["stderr"], output_limit)
@@ -339,6 +362,47 @@ class CloakBrowserConfig(BaseTool):
             )
 
 
+class BrowserCleanupInput(BaseModel):
+    session_name: str | None = Field(
+        default=None,
+        description="Optional agent-browser session name to close. If omitted, runs agent-browser close.",
+    )
+    timeout_seconds: int | None = Field(
+        default=None,
+        description="Cleanup timeout. Defaults to 30 seconds and is capped at 120 seconds.",
+    )
+
+
+class BrowserCleanup(BaseTool):
+    name: str = "browser_cleanup"
+    description: str = (
+        "Close an agent-browser session/browser with CloakBrowser env applied. "
+        "Use at the end of browser work or when a session is stuck. This is a gentle cleanup, not pkill."
+    )
+    args_schema: type[BaseModel] = BrowserCleanupInput
+
+    def _run(
+        self,
+        session_name: str | None = None,
+        timeout_seconds: int | None = None,
+    ) -> dict[str, Any]:
+        try:
+            timeout = _positive_int("timeout_seconds", timeout_seconds, default=30, maximum=120)
+            args = _agent_browser_prefix()
+            if session_name:
+                args.extend(["--session", session_name])
+            args.append("close")
+            out = _run_cli(args, timeout_seconds=timeout, env_update=_resolve_cloakbrowser_env())
+            out["session_name"] = session_name
+            out["cleanup"] = "gentle"
+            return out
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint="Gentle browser cleanup failed. Manual cleanup may require agent-browser close or pkill on the server.",
+            )
+
+
 class BrowserBrowseInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -350,6 +414,13 @@ class BrowserBrowseInput(BaseModel):
         ),
     )
     runtime: ToolRuntime
+    cleanup_session_name: str | None = Field(
+        default=None,
+        description=(
+            "Optional agent-browser session name to close in a finally-style cleanup after BrowserAgent returns. "
+            "If omitted, browser_browse runs a gentle global agent-browser close."
+        ),
+    )
 
 
 class BrowserBrowse(BaseTool):
@@ -361,7 +432,13 @@ class BrowserBrowse(BaseTool):
     )
     args_schema: type[BaseModel] = BrowserBrowseInput
 
-    def _run(self, objective: str, runtime: ToolRuntime):
+    def _run(
+        self,
+        objective: str,
+        runtime: ToolRuntime,
+        cleanup_session_name: str | None = None,
+    ):
+        cleanup_result = None
         try:
             from AgentConfigSetup import multi_agent_runtime
 
@@ -376,11 +453,14 @@ class BrowserBrowse(BaseTool):
                     f"# Objective\n{objective}\n\n"
                     "# Operating constraints\n"
                     "- Use the smallest number of browser commands and the smallest context needed.\n"
+                    "- Use an explicit agent-browser --session name for the task.\n"
                     "- Prefer targeted snapshots, text extraction, and URLs over full-page dumps.\n"
                     "- When only part of a page matters, use agent-browser eval or scoped snapshots to filter before extracting text.\n"
                     "- After opening a page or any navigation/action, wait patiently with agent-browser wait before reading state.\n"
                     "- If CLI syntax is uncertain, inspect agent-browser help/skills first.\n"
                     "- CloakBrowser is the default browser backend; use cloakbrowser_config status/configure if configuration is uncertain.\n"
+                    "- Close the browser/session with agent-browser close when the task is done or the session gets stuck.\n"
+                    "- Do not ask the user directly. If blocked, return a need_user_input section for BioInCoder.\n"
                     "- Return concise findings and cite URLs or artifact paths. Do not paste large page contents."
                 )
             )
@@ -423,3 +503,11 @@ class BrowserBrowse(BaseTool):
                 tool_call_id=runtime.tool_call_id,
                 hint="BrowserAgent failed. Retry browser_browse with a narrower objective or inspect saved messages.",
             )
+        finally:
+            try:
+                cleanup_result = BrowserCleanup()._run(
+                    session_name=cleanup_session_name,
+                    timeout_seconds=30,
+                )
+            except Exception:
+                cleanup_result = None

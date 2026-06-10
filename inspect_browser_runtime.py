@@ -22,6 +22,7 @@ def main() -> None:
     print(f"cloakbrowser found: {shutil.which(cloakbrowser_bin) or 'NO'}")
     print(f"cloakbrowser required: {os.environ.get('BIOINCODER_CLOAKBROWSER_REQUIRED', '1')}")
     print(f"cloakbrowser auto config: {os.environ.get('BIOINCODER_CLOAKBROWSER_AUTO_CONFIG', '1')}")
+    print(f"browser headless: {os.environ.get('BIOINCODER_BROWSER_HEADLESS', '1')}")
     print(
         "AGENT_BROWSER_EXECUTABLE_PATH configured: "
         f"{bool(os.environ.get('AGENT_BROWSER_EXECUTABLE_PATH'))}"
