@@ -21,6 +21,8 @@ On the server, configure these environment variables if needed:
 - `BIOINCODER_CLOAKBROWSER_REQUIRED`: set to `1` to require CloakBrowser. Default: `1`.
 - `BIOINCODER_CLOAKBROWSER_AUTO_CONFIG`: set to `1` to let BioInCoder compute CloakBrowser env vars from the installed Python package. Default: `1`.
 - `BIOINCODER_BROWSER_HEADLESS`: set to `1` to append `--headless,--disable-gpu` to `AGENT_BROWSER_ARGS`. Default: `1`.
+- `BIOINCODER_BROWSER_USERNAME`: optional username used by `browser_login_with_env`.
+- `BIOINCODER_BROWSER_PASSWORD`: optional password used by `browser_login_with_env`.
 - `AGENT_BROWSER_EXECUTABLE_PATH`: optional manual CloakBrowser binary path for agent-browser.
 - `AGENT_BROWSER_ARGS`: optional manual CloakBrowser stealth args for agent-browser.
 
@@ -62,6 +64,95 @@ Use help for specific commands when needed:
 ```json
 {"topic_args": ["snapshot", "-h"]}
 ```
+
+## Authentication State
+
+Use `browser_state` to save or load authenticated browser state.
+State files are stored under `artifacts/browser/auth` and may contain cookies or tokens.
+Treat them as sensitive.
+
+Save state after a successful login:
+
+```json
+{"action": "save", "session_name": "library_login", "state_path": "library.json"}
+```
+
+Load state before opening protected pages:
+
+```json
+{"action": "load", "session_name": "paper_access", "state_path": "library.json"}
+```
+
+Use `browser_login_with_env` when credentials are available as environment variables.
+Do not pass passwords through `agent_browser_command`.
+
+Required inputs:
+
+- `login_url`
+- `username_selector`: CSS selector for username/email input
+- `password_selector`: CSS selector for password input
+- `submit_selector`: optional CSS selector for submit button
+
+Example:
+
+```json
+{
+  "login_url": "https://example.edu/login",
+  "username_selector": "input[name='username']",
+  "password_selector": "input[type='password']",
+  "submit_selector": "button[type='submit']",
+  "session_name": "library_login",
+  "username_env": "BIOINCODER_BROWSER_USERNAME",
+  "password_env": "BIOINCODER_BROWSER_PASSWORD",
+  "state_path": "library.json"
+}
+```
+
+The tool does not return the password.
+It fills credentials using `agent-browser eval --stdin` so the password is not placed in CLI arguments.
+If selectors are unknown, browse the login page first, use a minimal snapshot/eval to identify selectors, then call `browser_login_with_env`.
+
+## Full Text / Download Access
+
+When the task requires article full text, PDF, supplementary files, or other protected downloads:
+
+1. Try public, lightweight sources first:
+   - article DOI landing page;
+   - PubMed/PMC;
+   - Europe PMC metadata or full-text XML;
+   - publisher metadata;
+   - explicit open-access PDF/supplement links.
+2. If the page presents access choices, choose legitimate institutional/library access:
+   - "Access through your institution";
+   - "Institutional login";
+   - "OpenAthens";
+   - "Shibboleth";
+   - library proxy / university login.
+3. If an institution must be selected and the user has not provided an institution name or clear hint, do not guess. Extract a small list of visible institution options or the required search input and return `need_user_input`.
+4. If the user has provided an institution name or hint, use it to search/select the matching institution, then continue with the exact target page or file.
+5. Do not choose purchase-oriented options unless the user explicitly asks:
+   - "Buy";
+   - "Rent";
+   - "Purchase PDF";
+   - "Subscribe".
+6. If the content is not public or a login wall appears, check for an existing auth state:
+
+```json
+{"action": "load", "session_name": "paper_access", "state_path": "library.json"}
+```
+
+7. Retry the exact target URL after loading state.
+8. If no usable state exists and credentials are configured in environment variables, identify login form selectors and call `browser_login_with_env`.
+9. Save authenticated state for reuse:
+
+```json
+{"action": "save", "session_name": "library_login", "state_path": "library.json"}
+```
+
+10. Return only the extracted findings, file path, or access limitation. Do not expose cookies, tokens, usernames, or passwords.
+
+Do not bypass paywalls or access controls except through legitimate user-provided credentials/session state.
+Do not use authenticated access for bulk downloading unless the user explicitly asks and the access terms permit it.
 
 ## Core Workflow
 

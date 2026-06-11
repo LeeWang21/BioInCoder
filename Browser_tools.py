@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 import time
 from pathlib import Path
@@ -82,7 +83,12 @@ def _positive_int(name: str, value: int | None, default: int, maximum: int) -> i
     return min(value, maximum)
 
 
-def _run_cli(args: list[str], timeout_seconds: int, env_update: dict[str, str] | None = None) -> dict[str, Any]:
+def _run_cli(
+    args: list[str],
+    timeout_seconds: int,
+    env_update: dict[str, str] | None = None,
+    input_text: str | None = None,
+) -> dict[str, Any]:
     started_at = time.time()
     env = os.environ.copy()
     if env_update:
@@ -93,6 +99,7 @@ def _run_cli(args: list[str], timeout_seconds: int, env_update: dict[str, str] |
         capture_output=True,
         timeout=timeout_seconds,
         env=env,
+        input=input_text,
     )
     return {
         "ok": proc.returncode == 0,
@@ -119,6 +126,23 @@ def _find_agent_browser_subcommand(args: list[str]) -> str | None:
 
 def _agent_browser_prefix() -> list[str]:
     return [AGENT_BROWSER_BIN]
+
+
+def _browser_auth_path(path: str | None) -> Path:
+    root = (BROWSER_ARTIFACT_DIR / "auth").resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    if path is None or not path.strip():
+        candidate = root / "browser_state.json"
+    else:
+        raw_path = Path(path)
+        if raw_path.is_absolute():
+            candidate = raw_path.resolve()
+        else:
+            candidate = (root / raw_path).resolve()
+    if root not in candidate.parents and candidate != root:
+        raise ValueError("Browser auth state path must stay inside artifacts/browser/auth.")
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    return candidate
 
 
 def _merge_agent_browser_args(browser_args: str) -> str:
@@ -403,6 +427,242 @@ class BrowserCleanup(BaseTool):
             )
 
 
+class BrowserStateInput(BaseModel):
+    action: Literal["save", "load"] = Field(
+        ...,
+        description="Save or load an agent-browser authentication/session state file.",
+    )
+    session_name: str = Field(
+        ...,
+        description="agent-browser session name to save from or load into.",
+    )
+    state_path: str | None = Field(
+        default=None,
+        description="Relative path under artifacts/browser/auth. Defaults to browser_state.json.",
+    )
+    timeout_seconds: int | None = Field(
+        default=None,
+        description="State command timeout. Defaults to 60 seconds and is capped at 180 seconds.",
+    )
+
+
+class BrowserState(BaseTool):
+    name: str = "browser_state"
+    description: str = (
+        "Save or load agent-browser login/session state. "
+        "Use this to reuse authenticated browser sessions without exposing passwords. "
+        "State files can contain cookies/tokens and are stored under artifacts/browser/auth."
+    )
+    args_schema: type[BaseModel] = BrowserStateInput
+
+    def _run(
+        self,
+        action: str,
+        session_name: str,
+        state_path: str | None = None,
+        timeout_seconds: int | None = None,
+    ) -> dict[str, Any]:
+        try:
+            if action not in {"save", "load"}:
+                raise ValueError("`action` must be 'save' or 'load'.")
+            timeout = _positive_int("timeout_seconds", timeout_seconds, default=60, maximum=180)
+            path = _browser_auth_path(state_path)
+            args = _agent_browser_prefix() + [
+                "--session",
+                session_name,
+                "state",
+                action,
+                str(path),
+            ]
+            out = _run_cli(args, timeout_seconds=timeout, env_update=_resolve_cloakbrowser_env())
+            out["session_name"] = session_name
+            out["state_path"] = str(path)
+            out["state_file_sensitive"] = True
+            return out
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint=(
+                    "browser_state failed. Confirm agent-browser supports `state save/load` "
+                    "and keep auth state paths under artifacts/browser/auth."
+                ),
+            )
+
+
+class BrowserLoginWithEnvInput(BaseModel):
+    login_url: str = Field(
+        ...,
+        description="Login page URL.",
+    )
+    username_selector: str = Field(
+        ...,
+        description="CSS selector for the username/email input.",
+    )
+    password_selector: str = Field(
+        ...,
+        description="CSS selector for the password input.",
+    )
+    submit_selector: str | None = Field(
+        default=None,
+        description="Optional CSS selector for submit button. If omitted, presses Enter on the password field.",
+    )
+    session_name: str = Field(
+        default="browser_login",
+        description="agent-browser session name used for login.",
+    )
+    username_env: str = Field(
+        default="BIOINCODER_BROWSER_USERNAME",
+        description="Environment variable containing the username. Its value is never returned.",
+    )
+    password_env: str = Field(
+        default="BIOINCODER_BROWSER_PASSWORD",
+        description="Environment variable containing the password. Its value is never returned.",
+    )
+    state_path: str | None = Field(
+        default=None,
+        description="Relative path under artifacts/browser/auth to save login state. Defaults to browser_state.json.",
+    )
+    wait_after_login_ms: int | None = Field(
+        default=None,
+        description="Milliseconds to wait after submit. Defaults to 5000 and is capped at 60000.",
+    )
+    timeout_seconds: int | None = Field(
+        default=None,
+        description="Timeout for each browser command. Defaults to 120 seconds and is capped at 600 seconds.",
+    )
+
+
+class BrowserLoginWithEnv(BaseTool):
+    name: str = "browser_login_with_env"
+    description: str = (
+        "Log in using username/password stored in environment variables, then save browser state. "
+        "Requires CSS selectors for the username and password fields. "
+        "Does not return the username or password and avoids putting the password in CLI arguments."
+    )
+    args_schema: type[BaseModel] = BrowserLoginWithEnvInput
+
+    def _run(
+        self,
+        login_url: str,
+        username_selector: str,
+        password_selector: str,
+        submit_selector: str | None = None,
+        session_name: str = "browser_login",
+        username_env: str = "BIOINCODER_BROWSER_USERNAME",
+        password_env: str = "BIOINCODER_BROWSER_PASSWORD",
+        state_path: str | None = None,
+        wait_after_login_ms: int | None = None,
+        timeout_seconds: int | None = None,
+    ) -> dict[str, Any]:
+        try:
+            username = os.environ.get(username_env)
+            password = os.environ.get(password_env)
+            if not username:
+                raise ValueError(f"Username environment variable is not set: {username_env}")
+            if not password:
+                raise ValueError(f"Password environment variable is not set: {password_env}")
+
+            timeout = _positive_int("timeout_seconds", timeout_seconds, default=120, maximum=600)
+            wait_ms = _positive_int(
+                "wait_after_login_ms",
+                wait_after_login_ms,
+                default=5000,
+                maximum=60000,
+            )
+            auth_path = _browser_auth_path(state_path)
+            env_update = _resolve_cloakbrowser_env()
+            prefix = _agent_browser_prefix() + ["--session", session_name]
+
+            steps: list[dict[str, Any]] = []
+            steps.append(
+                _run_cli(prefix + ["open", login_url], timeout_seconds=timeout, env_update=env_update)
+            )
+            steps.append(
+                _run_cli(prefix + ["wait", "--load", "networkidle"], timeout_seconds=timeout, env_update=env_update)
+            )
+
+            submit_js = (
+                "const submit = document.querySelector(SUBMIT_SELECTOR);\n"
+                "if (!submit) throw new Error('Submit selector not found: ' + SUBMIT_SELECTOR);\n"
+                "submit.click();\n"
+                if submit_selector
+                else (
+                    "passwordEl.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}));\n"
+                    "passwordEl.form && passwordEl.form.requestSubmit && passwordEl.form.requestSubmit();\n"
+                )
+            )
+            script = f"""
+const USERNAME_SELECTOR = {json.dumps(username_selector)};
+const PASSWORD_SELECTOR = {json.dumps(password_selector)};
+const SUBMIT_SELECTOR = {json.dumps(submit_selector)};
+const usernameEl = document.querySelector(USERNAME_SELECTOR);
+const passwordEl = document.querySelector(PASSWORD_SELECTOR);
+if (!usernameEl) throw new Error('Username selector not found: ' + USERNAME_SELECTOR);
+if (!passwordEl) throw new Error('Password selector not found: ' + PASSWORD_SELECTOR);
+function setValue(el, value) {{
+  el.focus();
+  el.value = value;
+  el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+  el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+}}
+setValue(usernameEl, {json.dumps(username)});
+setValue(passwordEl, {json.dumps(password)});
+{submit_js}
+JSON.stringify({{ ok: true, submitted: true }});
+"""
+            eval_out = _run_cli(
+                prefix + ["eval", "--stdin"],
+                timeout_seconds=timeout,
+                env_update=env_update,
+                input_text=script,
+            )
+            eval_out["command"] = prefix + ["eval", "--stdin"]
+            eval_out["secret_redacted"] = True
+            steps.append(eval_out)
+            steps.append(
+                _run_cli(prefix + ["wait", str(wait_ms)], timeout_seconds=timeout, env_update=env_update)
+            )
+            steps.append(
+                _run_cli(
+                    prefix + ["state", "save", str(auth_path)],
+                    timeout_seconds=timeout,
+                    env_update=env_update,
+                )
+            )
+
+            ok = all(step.get("ok") for step in steps)
+            return {
+                "ok": ok,
+                "session_name": session_name,
+                "login_url": login_url,
+                "username_env": username_env,
+                "password_env": password_env,
+                "password_redacted": True,
+                "state_path": str(auth_path),
+                "state_file_sensitive": True,
+                "steps": [
+                    {
+                        "ok": step.get("ok"),
+                        "command": step.get("command"),
+                        "returncode": step.get("returncode"),
+                        "stdout": step.get("stdout"),
+                        "stderr": step.get("stderr"),
+                        "elapsed_seconds": step.get("elapsed_seconds"),
+                        "secret_redacted": step.get("secret_redacted", False),
+                    }
+                    for step in steps
+                ],
+            }
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint=(
+                    "browser_login_with_env failed. Confirm env vars are set, CSS selectors are correct, "
+                    "and the login page is accessible with agent-browser/CloakBrowser."
+                ),
+            )
+
+
 class BrowserBrowseInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -459,6 +719,7 @@ class BrowserBrowse(BaseTool):
                     "- After opening a page or any navigation/action, wait patiently with agent-browser wait before reading state.\n"
                     "- If CLI syntax is uncertain, inspect agent-browser help/skills first.\n"
                     "- CloakBrowser is the default browser backend; use cloakbrowser_config status/configure if configuration is uncertain.\n"
+                    "- If full text, PDF, or supplementary files are blocked, try public metadata/OA routes first. If the page offers access choices, prefer legitimate institutional/library access such as Access through your institution, Institutional login, OpenAthens, Shibboleth, or library proxy; do not choose Buy, Rent, Purchase PDF, or Subscribe unless the user explicitly asks. If institution selection is required and no institution name/hint was provided, extract a small list of visible options or required input and return need_user_input instead of guessing. Then load saved auth state or use env-based login if legitimate credentials are configured.\n"
                     "- Close the browser/session with agent-browser close when the task is done or the session gets stuck.\n"
                     "- Do not ask the user directly. If blocked, return a need_user_input section for BioInCoder.\n"
                     "- Return concise findings and cite URLs or artifact paths. Do not paste large page contents."

@@ -18,6 +18,8 @@ from Browser_tools import (
     AgentBrowserHelp,
     BrowserCleanup,
     BrowserBrowse,
+    BrowserLoginWithEnv,
+    BrowserState,
     CloakBrowserConfig,
 )
 
@@ -116,6 +118,8 @@ agent_registry.register_tool(name="Agent_browser_command", tool=AgentBrowserComm
 agent_registry.register_tool(name="Agent_browser_help", tool=AgentBrowserHelp())
 agent_registry.register_tool(name="Cloakbrowser_config", tool=CloakBrowserConfig())
 agent_registry.register_tool(name="Browser_cleanup", tool=BrowserCleanup())
+agent_registry.register_tool(name="Browser_state", tool=BrowserState())
+agent_registry.register_tool(name="Browser_login_with_env", tool=BrowserLoginWithEnv())
 agent_registry.register_tool(name="Browser_browse", tool=BrowserBrowse())
 
 for tool in JupyterCodeToolkit().get_tools():
@@ -170,6 +174,8 @@ tools_for_browser = [
     "Cloakbrowser_config",
     "Agent_browser_command",
     "Browser_cleanup",
+    "Browser_state",
+    "Browser_login_with_env",
 ]
 
 SKILL_PROMPT_FOR_BROWSER = generate_skill_tool_prompt() if "Skill_tool" in tools_for_browser else ""
