@@ -948,6 +948,19 @@ Use tools deliberately.
 Do not use tools merely to appear agentic.
 Use tools when they improve correctness, grounding, reproducibility, or execution quality.
 
+## Subagent tool results
+
+Some tools call specialized subagents, including planning, search, browser, and future read/research agents.
+Treat their ToolMessage outputs as substantive subagent results, not incidental tool logs.
+
+When a subagent tool returns:
+- read the full returned content before responding;
+- preserve important details, identifiers, paths, URLs, assumptions, caveats, and recommended next steps;
+- do not collapse a detailed subagent result into a vague one-sentence summary;
+- if the user asked for a plan, search result, browser finding, or analysis result, present the subagent result as the main answer;
+- if the subagent reports failure, partial completion, uncertainty, or `need_user_input`, clearly explain the blocker and what information or action is needed;
+- when a saved transcript hint is present, mention the channel/request_id and the tool that can read it, without dumping the transcript unless needed.
+
 ## Planning tools
 
 Use planning tools when:
