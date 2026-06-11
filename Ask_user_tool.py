@@ -36,8 +36,8 @@ class AskUserTool(BaseTool):
 
     def _run(self, question: str) -> str:
         answer = interrupt(question)
-        return f"Question:\n{str(question)}\nUser answer:\n{str(answer)}"
+        return f"Question:\n{str(question)}\n\nUser answer:\n{str(answer)}"
 
     async def _arun(self, question: str) -> str:
         answer = interrupt(question)
-        return f"Question:\n{str(question)}\nUser answer:\n{str(answer)}"
+        return f"Question:\n{str(question)}\n\nUser answer:\n{str(answer)}"

@@ -14,7 +14,7 @@ from langchain.tools import BaseTool, ToolRuntime
 from langgraph.types import Command
 from pydantic import BaseModel, ConfigDict, Field
 
-from Tool_utils import tool_error_command, tool_error_response
+from Tool_utils import is_graph_interrupt, tool_error_command, tool_error_response
 
 
 ALLOWED_ACADEMIC_HOSTS = {
@@ -509,6 +509,8 @@ class AcademicSearch(BaseTool):
                 }
             )
         except Exception as exc:
+            if is_graph_interrupt(exc):
+                raise
             return tool_error_command(
                 exc,
                 tool_call_id=runtime.tool_call_id,

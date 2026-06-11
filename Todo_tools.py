@@ -4,7 +4,7 @@ from langchain.tools import BaseTool, ToolRuntime
 from langchain.messages import HumanMessage, ToolMessage
 
 from langgraph.types import Command, interrupt
-from Tool_utils import tool_error_command
+from Tool_utils import is_graph_interrupt, tool_error_command
 
 
 class PlanChecklistStep(BaseModel):
@@ -163,6 +163,8 @@ class WritePlan(BaseTool):
 
             return Command(update=update)
         except Exception as exc:
+            if is_graph_interrupt(exc):
+                raise
             return tool_error_command(
                 exc,
                 tool_call_id=runtime.tool_call_id,

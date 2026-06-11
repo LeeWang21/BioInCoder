@@ -4,6 +4,10 @@ from langchain.messages import ToolMessage
 from langgraph.types import Command
 
 
+def is_graph_interrupt(error: BaseException) -> bool:
+    return type(error).__name__ == "GraphInterrupt"
+
+
 def tool_error_response(
     error: Exception | str,
     error_type: str | None = None,
