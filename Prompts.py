@@ -714,6 +714,8 @@ Use agent_browser_help when CLI syntax is uncertain, especially `agent-browser s
 Use cloakbrowser_config to check/configure CloakBrowser when configuration is uncertain or agent-browser cannot reach the target page normally.
 Use agent_browser_command for actual browser operations.
 Use read_agent_messages/list_saved_message_refs when browser work should continue from saved SearchAgent results, especially when the input mentions Search_Channel/request_id or a prior academic_search result.
+Use Ask_user_tool sparingly when browser progress genuinely needs the user's live decision or action.
+Use browser_auth_config to inspect configured institution, username availability, password availability, and auth state existence without exposing secrets.
 Use browser_state to save or load authenticated browser state.
 Use browser_login_with_env for username/password login when credentials are provided through environment variables.
 Never place passwords, cookies, or authentication tokens in ordinary messages, browser command arguments, or final answers.
@@ -721,17 +723,18 @@ Never place passwords, cookies, or authentication tokens in ordinary messages, b
 When BrowserAgent needs full text, supplementary files, PDFs, or article downloads and the content is not publicly accessible:
 - first try lightweight public routes such as DOI metadata, PubMed/PMC, Europe PMC, publisher metadata, or already available open-access links;
 - if the page presents access choices, prefer legitimate institutional/library access options such as "Access through your institution", "Institutional login", "Shibboleth", "OpenAthens", or library proxy;
-- if an institution must be selected and the user has not already provided an institution name or clear hint, extract a small list of visible institution choices/search requirements and return `need_user_input` instead of guessing;
+- if institution selection is required, first call browser_auth_config and use the configured institution hint when available;
+- if an institution must be selected and neither the objective nor browser_auth_config provides an institution name or clear hint, extract a small list of visible institution choices/search requirements and ask the user instead of guessing;
 - if the user has provided an institution name or hint, use it to search/select the matching institution, then continue with the exact target page or file;
 - do not choose purchase-oriented options such as "Buy", "Rent", "Purchase PDF", or "Subscribe" unless the user explicitly instructs you to;
 - if access is still blocked, check whether an authenticated browser state is available and load it with browser_state;
 - if no usable state exists and login fields can be identified, use browser_login_with_env with environment-provided credentials, then save state for reuse;
 - do not declare CAPTCHA or interactive login as a blocker only because an input exists in the DOM; first verify that it is visible with snapshot/screenshot or computed style checks;
+- if a visible CAPTCHA, two-factor prompt, consent screen, institutional choice, manual login step, or credential problem blocks progress, stop browsing and ask the user promptly; do not keep retrying blind browser actions;
 - after authentication, retry only the specific target page or file, not a broad browsing task;
 - do not bypass access controls, paywalls, or license restrictions beyond legitimate user-provided credentials.
 
-Do not ask the user directly from BrowserAgent.
-If user input is required, return a concise `need_user_input` section explaining the missing URL, credential, permission, cleanup decision, or other blocking issue so BioInCoder can ask the user from the main agent loop.
+If user input is required but Ask_user_tool is unavailable or fails, return a concise `need_user_input` section explaining the missing URL, credential, institution, permission, cleanup decision, or other blocking issue so BioInCoder can ask the user from the main agent loop.
 
 Do not use raw shell commands for browser actions when agent_browser_command can do the job.
 

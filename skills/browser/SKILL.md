@@ -21,6 +21,7 @@ On the server, configure these environment variables if needed:
 - `BIOINCODER_CLOAKBROWSER_REQUIRED`: set to `1` to require CloakBrowser. Default: `1`.
 - `BIOINCODER_CLOAKBROWSER_AUTO_CONFIG`: set to `1` to let BioInCoder compute CloakBrowser env vars from the installed Python package. Default: `1`.
 - `BIOINCODER_BROWSER_HEADLESS`: set to `1` to append `--headless,--disable-gpu` to `AGENT_BROWSER_ARGS`. Default: `1`.
+- `BIOINCODER_BROWSER_INSTITUTION`: optional institution/access hint, such as `Tsinghua University`.
 - `BIOINCODER_BROWSER_USERNAME`: optional username used by `browser_login_with_env`.
 - `BIOINCODER_BROWSER_PASSWORD`: optional password used by `browser_login_with_env`.
 - `AGENT_BROWSER_EXECUTABLE_PATH`: optional manual CloakBrowser binary path for agent-browser.
@@ -85,6 +86,7 @@ Load state before opening protected pages:
 
 Use `browser_login_with_env` when credentials are available as environment variables.
 Do not pass passwords through `agent_browser_command`.
+Use `browser_auth_config` before institution/login flows to inspect configured institution, username availability, password availability, and auth state existence without exposing secrets.
 
 Required inputs:
 
@@ -102,6 +104,7 @@ Example:
   "password_selector": "input[type='password']",
   "submit_selector": "button[type='submit']",
   "session_name": "library_login",
+  "institution_env": "BIOINCODER_BROWSER_INSTITUTION",
   "username_env": "BIOINCODER_BROWSER_USERNAME",
   "password_env": "BIOINCODER_BROWSER_PASSWORD",
   "state_path": "library.json"
@@ -128,29 +131,31 @@ When the task requires article full text, PDF, supplementary files, or other pro
    - "OpenAthens";
    - "Shibboleth";
    - library proxy / university login.
-3. If an institution must be selected and the user has not provided an institution name or clear hint, do not guess. Extract a small list of visible institution options or the required search input and return `need_user_input`.
-4. If the user has provided an institution name or hint, use it to search/select the matching institution, then continue with the exact target page or file.
-5. Do not choose purchase-oriented options unless the user explicitly asks:
+3. If institution selection is required, call `browser_auth_config` first and use the configured institution hint when available.
+4. If an institution must be selected and neither the objective nor `browser_auth_config` provides an institution name or clear hint, do not guess. Extract a small list of visible institution options or the required search input and ask the user.
+5. If the user has provided an institution name or hint, use it to search/select the matching institution, then continue with the exact target page or file.
+6. Do not choose purchase-oriented options unless the user explicitly asks:
    - "Buy";
    - "Rent";
    - "Purchase PDF";
    - "Subscribe".
-6. If the content is not public or a login wall appears, check for an existing auth state:
+7. If the content is not public or a login wall appears, check for an existing auth state:
 
 ```json
 {"action": "load", "session_name": "paper_access", "state_path": "library.json"}
 ```
 
-7. Retry the exact target URL after loading state.
-8. If no usable state exists and credentials are configured in environment variables, identify login form selectors and call `browser_login_with_env`.
-9. Do not declare CAPTCHA or interactive login as a blocker only because an input exists in the DOM. Verify that the field is visible with snapshot/screenshot or computed style checks.
-10. Save authenticated state for reuse:
+8. Retry the exact target URL after loading state.
+9. If no usable state exists and credentials are configured in environment variables, identify login form selectors and call `browser_login_with_env`.
+10. Do not declare CAPTCHA or interactive login as a blocker only because an input exists in the DOM. Verify that the field is visible with snapshot/screenshot or computed style checks.
+11. If a visible CAPTCHA, two-factor prompt, consent screen, institutional choice, manual login step, or credential problem blocks progress, stop browsing and ask the user promptly. Do not keep retrying blind browser actions.
+12. Save authenticated state for reuse:
 
 ```json
 {"action": "save", "session_name": "library_login", "state_path": "library.json"}
 ```
 
-11. Return only the extracted findings, file path, or access limitation. Do not expose cookies, tokens, usernames, or passwords.
+13. Return only the extracted findings, file path, or access limitation. Do not expose cookies, tokens, usernames, or passwords.
 
 Do not bypass paywalls or access controls except through legitimate user-provided credentials/session state.
 Do not use authenticated access for bulk downloading unless the user explicitly asks and the access terms permit it.
@@ -434,7 +439,9 @@ If agent-browser is unavailable:
 - return the installation/configuration error from the tool;
 - do not pretend that browsing succeeded.
 
-Do not ask the user directly from BrowserAgent. If a blocking choice is needed, return a `need_user_input` section for BioInCoder to ask from the main agent loop.
+Ask the user promptly when browser progress truly requires a live human decision or action, such as institution choice, visible CAPTCHA, 2FA, consent, manual login, credential problem, or cleanup permission.
+Keep the question concrete and include the current URL plus the smallest useful set of visible options.
+If asking is unavailable or fails, return a `need_user_input` section for BioInCoder.
 
 ## Failure Budget
 

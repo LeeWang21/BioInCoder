@@ -489,6 +489,65 @@ class BrowserState(BaseTool):
             )
 
 
+class BrowserAuthConfigInput(BaseModel):
+    username_env: str = Field(
+        default="BIOINCODER_BROWSER_USERNAME",
+        description="Environment variable containing the username.",
+    )
+    password_env: str = Field(
+        default="BIOINCODER_BROWSER_PASSWORD",
+        description="Environment variable containing the password.",
+    )
+    institution_env: str = Field(
+        default="BIOINCODER_BROWSER_INSTITUTION",
+        description="Environment variable containing the institution name or access hint.",
+    )
+    state_path: str | None = Field(
+        default=None,
+        description="Relative browser auth state path to inspect under artifacts/browser/auth.",
+    )
+
+
+class BrowserAuthConfig(BaseTool):
+    name: str = "browser_auth_config"
+    description: str = (
+        "Inspect browser authentication configuration without exposing secrets. "
+        "Reports whether username/password env vars are set, the configured institution hint, "
+        "and whether the requested browser auth state file exists."
+    )
+    args_schema: type[BaseModel] = BrowserAuthConfigInput
+
+    def _run(
+        self,
+        username_env: str = "BIOINCODER_BROWSER_USERNAME",
+        password_env: str = "BIOINCODER_BROWSER_PASSWORD",
+        institution_env: str = "BIOINCODER_BROWSER_INSTITUTION",
+        state_path: str | None = None,
+    ) -> dict[str, Any]:
+        try:
+            auth_path = _browser_auth_path(state_path)
+            institution = os.environ.get(institution_env)
+            return {
+                "ok": True,
+                "username_env": username_env,
+                "username_configured": bool(os.environ.get(username_env)),
+                "password_env": password_env,
+                "password_configured": bool(os.environ.get(password_env)),
+                "password_redacted": True,
+                "institution_env": institution_env,
+                "institution": institution if institution else None,
+                "institution_configured": bool(institution),
+                "state_path": str(auth_path),
+                "state_file_exists": auth_path.exists(),
+                "state_file_sensitive": True,
+            }
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint="browser_auth_config failed. Keep auth state paths under artifacts/browser/auth.",
+            )
+
+
 class BrowserLoginWithEnvInput(BaseModel):
     login_url: str = Field(
         ...,
@@ -517,6 +576,10 @@ class BrowserLoginWithEnvInput(BaseModel):
     password_env: str = Field(
         default="BIOINCODER_BROWSER_PASSWORD",
         description="Environment variable containing the password. Its value is never returned.",
+    )
+    institution_env: str = Field(
+        default="BIOINCODER_BROWSER_INSTITUTION",
+        description="Optional environment variable containing the institution name or access hint.",
     )
     state_path: str | None = Field(
         default=None,
@@ -550,6 +613,7 @@ class BrowserLoginWithEnv(BaseTool):
         session_name: str = "browser_login",
         username_env: str = "BIOINCODER_BROWSER_USERNAME",
         password_env: str = "BIOINCODER_BROWSER_PASSWORD",
+        institution_env: str = "BIOINCODER_BROWSER_INSTITUTION",
         state_path: str | None = None,
         wait_after_login_ms: int | None = None,
         timeout_seconds: int | None = None,
@@ -557,6 +621,7 @@ class BrowserLoginWithEnv(BaseTool):
         try:
             username = os.environ.get(username_env)
             password = os.environ.get(password_env)
+            institution = os.environ.get(institution_env)
             if not username:
                 raise ValueError(f"Username environment variable is not set: {username_env}")
             if not password:
@@ -626,6 +691,8 @@ JSON.stringify({{ ok: true, submitted: true }});
                     "login_url": login_url,
                     "username_env": username_env,
                     "password_env": password_env,
+                    "institution_env": institution_env,
+                    "institution": institution,
                     "password_redacted": True,
                     "state_path": str(auth_path),
                     "state_file_sensitive": True,
@@ -692,6 +759,8 @@ JSON.stringify({
                     "login_url": login_url,
                     "username_env": username_env,
                     "password_env": password_env,
+                    "institution_env": institution_env,
+                    "institution": institution,
                     "password_redacted": True,
                     "state_path": str(auth_path),
                     "state_file_sensitive": True,
@@ -729,6 +798,8 @@ JSON.stringify({
                 "login_url": login_url,
                 "username_env": username_env,
                 "password_env": password_env,
+                "institution_env": institution_env,
+                "institution": institution,
                 "password_redacted": True,
                 "state_path": str(auth_path),
                 "state_file_sensitive": True,
@@ -813,9 +884,9 @@ class BrowserBrowse(BaseTool):
                     "- After opening a page or any navigation/action, wait patiently with agent-browser wait before reading state.\n"
                     "- If CLI syntax is uncertain, inspect agent-browser help/skills first.\n"
                     "- CloakBrowser is the default browser backend; use cloakbrowser_config status/configure if configuration is uncertain.\n"
-                    "- If full text, PDF, or supplementary files are blocked, try public metadata/OA routes first. If the page offers access choices, prefer legitimate institutional/library access such as Access through your institution, Institutional login, OpenAthens, Shibboleth, or library proxy; do not choose Buy, Rent, Purchase PDF, or Subscribe unless the user explicitly asks. If institution selection is required and no institution name/hint was provided, extract a small list of visible options or required input and return need_user_input instead of guessing. Then load saved auth state or use env-based login if legitimate credentials are configured.\n"
+                    "- If full text, PDF, or supplementary files are blocked, try public metadata/OA routes first. If the page offers access choices, prefer legitimate institutional/library access such as Access through your institution, Institutional login, OpenAthens, Shibboleth, or library proxy; do not choose Buy, Rent, Purchase PDF, or Subscribe unless the user explicitly asks. If institution selection is required, check browser_auth_config first and use the configured institution hint when available. If no institution hint is available, extract a small list of visible options or required input and ask the user instead of guessing. Then load saved auth state or use env-based login if legitimate credentials are configured.\n"
                     "- Close the browser/session with agent-browser close when the task is done or the session gets stuck.\n"
-                    "- Do not ask the user directly. If blocked, return a need_user_input section for BioInCoder.\n"
+                    "- Ask the user promptly only when progress truly requires a live human decision/action, such as institution choice, visible CAPTCHA, 2FA, consent, manual login, credential problem, or cleanup permission. If asking is unavailable, return a need_user_input section for BioInCoder.\n"
                     "- Return concise findings and cite URLs or artifact paths. Do not paste large page contents."
                 )
             )

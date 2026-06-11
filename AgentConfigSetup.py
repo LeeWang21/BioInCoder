@@ -16,6 +16,7 @@ from Search_tools import AcademicRestRequest, AcademicSearch
 from Browser_tools import (
     AgentBrowserCommand,
     AgentBrowserHelp,
+    BrowserAuthConfig,
     BrowserCleanup,
     BrowserBrowse,
     BrowserLoginWithEnv,
@@ -118,6 +119,7 @@ agent_registry.register_tool(name="Agent_browser_command", tool=AgentBrowserComm
 agent_registry.register_tool(name="Agent_browser_help", tool=AgentBrowserHelp())
 agent_registry.register_tool(name="Cloakbrowser_config", tool=CloakBrowserConfig())
 agent_registry.register_tool(name="Browser_cleanup", tool=BrowserCleanup())
+agent_registry.register_tool(name="Browser_auth_config", tool=BrowserAuthConfig())
 agent_registry.register_tool(name="Browser_state", tool=BrowserState())
 agent_registry.register_tool(name="Browser_login_with_env", tool=BrowserLoginWithEnv())
 agent_registry.register_tool(name="Browser_browse", tool=BrowserBrowse())
@@ -167,6 +169,7 @@ Search_AgentConfig = AgentConfig(
 
 #Browser_AgentConfig
 tools_for_browser = [
+    "Ask_user_tool",
     "Skill_tool",
     "Read_agent_messages",
     "List_saved_message_refs",
@@ -174,6 +177,7 @@ tools_for_browser = [
     "Cloakbrowser_config",
     "Agent_browser_command",
     "Browser_cleanup",
+    "Browser_auth_config",
     "Browser_state",
     "Browser_login_with_env",
 ]
