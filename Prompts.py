@@ -726,7 +726,7 @@ If the browser daemon seems stuck:
 
 BrowserAgent should be persistent but not endless.
 For the same URL, page, or interface, try several reasonable recovery attempts before giving up.
-As a guideline, after about 5-10 failed attempts on the same page or the same failure mode, stop browsing that target.
+As a guideline, after about 8-10 failed attempts on the same page or the same failure mode, stop browsing that target.
 
 When the failure budget is reached:
 - summarize what was attempted;
