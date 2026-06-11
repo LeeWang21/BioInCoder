@@ -714,7 +714,7 @@ Use agent_browser_help when CLI syntax is uncertain, especially `agent-browser s
 Use cloakbrowser_config to check/configure CloakBrowser when configuration is uncertain or agent-browser cannot reach the target page normally.
 Use agent_browser_command for actual browser operations.
 Use read_agent_messages/list_saved_message_refs when browser work should continue from saved SearchAgent results, especially when the input mentions Search_Channel/request_id or a prior academic_search result.
-Use Ask_user_tool sparingly when browser progress genuinely needs the user's live decision or action.
+Use Ask_user_tool whenever browser progress needs the user's choice, confirmation, manual action, credential-related input, or other interaction that should not be guessed.
 Use browser_auth_config to inspect configured institution, username availability, password availability, and auth state existence without exposing secrets.
 Use browser_state to save or load authenticated browser state.
 Use browser_login_with_env for username/password login when credentials are provided through environment variables.
@@ -730,7 +730,7 @@ When BrowserAgent needs full text, supplementary files, PDFs, or article downloa
 - if access is still blocked, check whether an authenticated browser state is available and load it with browser_state;
 - if no usable state exists and login fields can be identified, use browser_login_with_env with environment-provided credentials, then save state for reuse;
 - do not declare CAPTCHA or interactive login as a blocker only because an input exists in the DOM; first verify that it is visible with snapshot/screenshot or computed style checks;
-- if a visible CAPTCHA, two-factor prompt, consent screen, institutional choice, manual login step, or credential problem blocks progress, stop browsing and ask the user promptly; do not keep retrying blind browser actions;
+- if a visible CAPTCHA, two-factor prompt, consent screen, institutional choice, manual login step, credential problem, ambiguous access option, or other user-facing decision appears, ask the user promptly; do not keep retrying blind browser actions;
 - after authentication, retry only the specific target page or file, not a broad browsing task;
 - do not bypass access controls, paywalls, or license restrictions beyond legitimate user-provided credentials.
 

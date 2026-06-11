@@ -439,8 +439,8 @@ If agent-browser is unavailable:
 - return the installation/configuration error from the tool;
 - do not pretend that browsing succeeded.
 
-Ask the user promptly when browser progress truly requires a live human decision or action, such as institution choice, visible CAPTCHA, 2FA, consent, manual login, credential problem, or cleanup permission.
-Keep the question concrete and include the current URL plus the smallest useful set of visible options.
+Ask the user promptly whenever browser progress needs the user's choice, confirmation, manual action, credential-related input, or other interaction that should not be guessed.
+Keep the question concrete and include the current URL plus the smallest useful set of visible options or actions.
 If asking is unavailable or fails, return a `need_user_input` section for BioInCoder.
 
 ## Failure Budget

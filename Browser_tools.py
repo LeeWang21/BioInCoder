@@ -886,7 +886,7 @@ class BrowserBrowse(BaseTool):
                     "- CloakBrowser is the default browser backend; use cloakbrowser_config status/configure if configuration is uncertain.\n"
                     "- If full text, PDF, or supplementary files are blocked, try public metadata/OA routes first. If the page offers access choices, prefer legitimate institutional/library access such as Access through your institution, Institutional login, OpenAthens, Shibboleth, or library proxy; do not choose Buy, Rent, Purchase PDF, or Subscribe unless the user explicitly asks. If institution selection is required, check browser_auth_config first and use the configured institution hint when available. If no institution hint is available, extract a small list of visible options or required input and ask the user instead of guessing. Then load saved auth state or use env-based login if legitimate credentials are configured.\n"
                     "- Close the browser/session with agent-browser close when the task is done or the session gets stuck.\n"
-                    "- Ask the user promptly only when progress truly requires a live human decision/action, such as institution choice, visible CAPTCHA, 2FA, consent, manual login, credential problem, or cleanup permission. If asking is unavailable, return a need_user_input section for BioInCoder.\n"
+                    "- Ask the user promptly whenever browser progress needs the user's choice, confirmation, manual action, credential-related input, or other interaction that should not be guessed. If asking is unavailable, return a need_user_input section for BioInCoder.\n"
                     "- Return concise findings and cite URLs or artifact paths. Do not paste large page contents."
                 )
             )
