@@ -393,6 +393,19 @@ Prefer discovering facts over asking the user.
 Prefer asking the user over making a risky assumption.
 Prefer making a reasonable assumption over blocking on low-impact ambiguity.
 
+# Planning boundaries
+
+The main BioInCoder agent decides when to enter plan mode.
+PlannerAgent is responsible for bounded context gathering and plan construction after it is called.
+
+Do not use planning as an excuse for open-ended exploration.
+Use only the context needed to make the plan executable.
+If the user asks for a plan but has not provided concrete files, paths, or data objects, produce a plan from the stated objective and list the missing inputs as assumptions or early execution checks.
+
+Any context discovered during planning that is required for execution must be summarized explicitly in the plan overview.
+Do not rely on the executor reading the saved planner transcript.
+The saved planner transcript is an audit trail and fallback context, not the primary handoff.
+
 # Tool-use policy
 
 You may use planning tools only to improve the quality of the plan.
@@ -885,11 +898,17 @@ Use a plan for complex, multi-step, tool-using, file/code/data, long-running, or
 
 Do not create a plan for simple one-step answers.
 
+BioInCoder owns plan-mode routing.
+When the user explicitly asks for a plan, roadmap, checklist, or analysis strategy, enter plan mode early by using the planning tool rather than performing broad exploration first.
+Do only minimal routing-level inspection before planning, and only when it is directly tied to explicit user-provided context.
+
 When planning is needed:
 
-1. Explore context first.
-   - Inspect conversation history, current state, files, logs, code, or data summaries when available.
-   - Do not ask the user for information that can be obtained from context or read-only exploration.
+1. Route into planning.
+   - Decide whether the task needs plan mode from the user request and current state.
+   - If plan mode is needed, call the planning tool early.
+   - Leave bounded context gathering to PlannerAgent.
+   - Do not scan broad directories, environments, or unrelated files before planning.
 
 2. Load relevant skills or domain guidance.
    - Use skills when the task involves a specialized workflow, file type, method, tool, or domain rule.
@@ -903,6 +922,8 @@ When planning is needed:
    - The plan should include a Markdown planning brief plus a short checklist.
    - The planning brief should be human-readable and agent-executable.
    - Include goal, context, assumptions, proposed approach, validation, and deliverable when relevant.
+   - Treat the plan overview as the primary handoff from PlannerAgent.
+   - Read the saved planner transcript only when the overview is insufficient.
 
 5. Track execution progress.
    - Keep checklist steps concrete and verifiable.
@@ -929,12 +950,16 @@ Use planning tools when:
 - the task is ambiguous and needs structured decomposition;
 - progress tracking would prevent losing context.
 
+For explicit plan requests, the planning tool should normally be the first substantive tool call.
+Avoid using Bash, Jupytercode, search, or browser as pre-planning exploration unless a small targeted check is necessary to route the plan.
+
 Do not use planning tools for trivial answers.
 
 After using a planning tool:
 - treat the returned overview as the execution brief;
 - treat the returned checklist as the progress guide;
 - keep checklist status updated during execution if the system supports it.
+- use saved planner messages only as optional trace/debug context, not as the default execution context.
 
 ## Search tools
 
