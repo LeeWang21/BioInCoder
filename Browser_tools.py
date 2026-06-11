@@ -619,9 +619,101 @@ JSON.stringify({{ ok: true, submitted: true }});
             eval_out["command"] = prefix + ["eval", "--stdin"]
             eval_out["secret_redacted"] = True
             steps.append(eval_out)
+            if not eval_out.get("ok"):
+                return {
+                    "ok": False,
+                    "session_name": session_name,
+                    "login_url": login_url,
+                    "username_env": username_env,
+                    "password_env": password_env,
+                    "password_redacted": True,
+                    "state_path": str(auth_path),
+                    "state_file_sensitive": True,
+                    "state_saved": False,
+                    "hint": "Login form submission failed. Do not treat the auth state as logged in.",
+                    "steps": [
+                        {
+                            "ok": step.get("ok"),
+                            "command": step.get("command"),
+                            "returncode": step.get("returncode"),
+                            "stdout": step.get("stdout"),
+                            "stderr": step.get("stderr"),
+                            "elapsed_seconds": step.get("elapsed_seconds"),
+                            "secret_redacted": step.get("secret_redacted", False),
+                        }
+                        for step in steps
+                    ],
+                }
             steps.append(
                 _run_cli(prefix + ["wait", str(wait_ms)], timeout_seconds=timeout, env_update=env_update)
             )
+            status_script = """
+function visible(el) {
+  if (!el) return false;
+  const style = window.getComputedStyle(el);
+  const rect = el.getBoundingClientRect();
+  return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+}
+const visiblePasswordInputs = Array.from(document.querySelectorAll('input[type="password"]')).filter(visible).length;
+const visibleCaptchaInputs = Array.from(document.querySelectorAll('input,textarea'))
+  .filter(visible)
+  .filter(el => /captcha|验证码|校验码|i_code|verify/i.test([el.id, el.name, el.placeholder, el.getAttribute('aria-label')].join(' ')))
+  .map(el => ({id: el.id, name: el.name, placeholder: el.placeholder}));
+const bodyText = document.body ? document.body.innerText.slice(0, 5000) : '';
+const errorLike = /验证码|校验码|captcha|错误|失败|无效|invalid|incorrect|failed/i.test(bodyText);
+JSON.stringify({
+  url: location.href,
+  title: document.title,
+  visiblePasswordInputs,
+  visibleCaptchaInputs,
+  errorLike
+});
+"""
+            status_out = _run_cli(
+                prefix + ["eval", status_script],
+                timeout_seconds=timeout,
+                env_update=env_update,
+            )
+            steps.append(status_out)
+            login_status: dict[str, Any] = {}
+            if status_out.get("ok") and status_out.get("stdout"):
+                try:
+                    login_status = json.loads(json.loads(status_out["stdout"]))
+                except Exception:
+                    login_status = {}
+            if (
+                login_status.get("visiblePasswordInputs", 0) > 0
+                or login_status.get("visibleCaptchaInputs")
+                or login_status.get("errorLike")
+            ):
+                return {
+                    "ok": False,
+                    "session_name": session_name,
+                    "login_url": login_url,
+                    "username_env": username_env,
+                    "password_env": password_env,
+                    "password_redacted": True,
+                    "state_path": str(auth_path),
+                    "state_file_sensitive": True,
+                    "state_saved": False,
+                    "login_status": login_status,
+                    "hint": (
+                        "Login did not appear complete after submission. "
+                        "Visible password/captcha/error indicators remain, so auth state was not saved."
+                    ),
+                    "steps": [
+                        {
+                            "ok": step.get("ok"),
+                            "command": step.get("command"),
+                            "returncode": step.get("returncode"),
+                            "stdout": step.get("stdout"),
+                            "stderr": step.get("stderr"),
+                            "elapsed_seconds": step.get("elapsed_seconds"),
+                            "secret_redacted": step.get("secret_redacted", False),
+                        }
+                        for step in steps
+                    ],
+                }
             steps.append(
                 _run_cli(
                     prefix + ["state", "save", str(auth_path)],
@@ -640,6 +732,8 @@ JSON.stringify({{ ok: true, submitted: true }});
                 "password_redacted": True,
                 "state_path": str(auth_path),
                 "state_file_sensitive": True,
+                "state_saved": ok,
+                "login_status": login_status,
                 "steps": [
                     {
                         "ok": step.get("ok"),

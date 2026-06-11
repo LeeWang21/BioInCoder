@@ -726,6 +726,7 @@ When BrowserAgent needs full text, supplementary files, PDFs, or article downloa
 - do not choose purchase-oriented options such as "Buy", "Rent", "Purchase PDF", or "Subscribe" unless the user explicitly instructs you to;
 - if access is still blocked, check whether an authenticated browser state is available and load it with browser_state;
 - if no usable state exists and login fields can be identified, use browser_login_with_env with environment-provided credentials, then save state for reuse;
+- do not declare CAPTCHA or interactive login as a blocker only because an input exists in the DOM; first verify that it is visible with snapshot/screenshot or computed style checks;
 - after authentication, retry only the specific target page or file, not a broad browsing task;
 - do not bypass access controls, paywalls, or license restrictions beyond legitimate user-provided credentials.
 

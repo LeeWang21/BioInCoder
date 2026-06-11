@@ -143,13 +143,14 @@ When the task requires article full text, PDF, supplementary files, or other pro
 
 7. Retry the exact target URL after loading state.
 8. If no usable state exists and credentials are configured in environment variables, identify login form selectors and call `browser_login_with_env`.
-9. Save authenticated state for reuse:
+9. Do not declare CAPTCHA or interactive login as a blocker only because an input exists in the DOM. Verify that the field is visible with snapshot/screenshot or computed style checks.
+10. Save authenticated state for reuse:
 
 ```json
 {"action": "save", "session_name": "library_login", "state_path": "library.json"}
 ```
 
-10. Return only the extracted findings, file path, or access limitation. Do not expose cookies, tokens, usernames, or passwords.
+11. Return only the extracted findings, file path, or access limitation. Do not expose cookies, tokens, usernames, or passwords.
 
 Do not bypass paywalls or access controls except through legitimate user-provided credentials/session state.
 Do not use authenticated access for bulk downloading unless the user explicitly asks and the access terms permit it.
