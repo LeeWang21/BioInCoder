@@ -9,7 +9,7 @@ from Message_tools import ReadAgentMessages, ListSavedMessageRefs
 from Skill_tool import SkillTool, generate_skill_tool_prompt
 from Todo_tools import WritePlan, UpdateChecklist, AdvanceChecklist
 from LLM import llm
-from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, BIOINCODER_PROMPT
+from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, BIOINCODER_PROMPT
 from Runtime import MultiAgentRuntime
 from jupytercode_tool import JupyterCodeToolkit, JUPYTER_REGISTRY
 from Search_tools import AcademicRestRequest, AcademicSearch
@@ -24,6 +24,7 @@ from Browser_tools import (
     BrowserState,
     CloakBrowserConfig,
 )
+from Read_tools import MarkItDownCommand, ReadArtifact
 
 from langchain_community.tools import ShellTool
 from langgraph.checkpoint.memory import InMemorySaver
@@ -125,6 +126,8 @@ agent_registry.register_tool(name="Browser_download_artifact", tool=BrowserDownl
 agent_registry.register_tool(name="Browser_state", tool=BrowserState())
 agent_registry.register_tool(name="Browser_login_with_env", tool=BrowserLoginWithEnv())
 agent_registry.register_tool(name="Browser_browse", tool=BrowserBrowse())
+agent_registry.register_tool(name="Markitdown_command", tool=MarkItDownCommand())
+agent_registry.register_tool(name="Read_artifact", tool=ReadArtifact())
 
 for tool in JupyterCodeToolkit().get_tools():
     agent_registry.register_tool(name=tool.name, tool=tool)
@@ -196,6 +199,25 @@ Browser_AgentConfig = AgentConfig(
     tool_names = tools_for_browser,
 )
 
+#Read_AgentConfig
+tools_for_read = [
+    "Skill_tool",
+    "Read_agent_messages",
+    "List_saved_message_refs",
+    "Markitdown_command",
+]
+
+SKILL_PROMPT_FOR_READ = generate_skill_tool_prompt() if "Skill_tool" in tools_for_read else ""
+
+Read_AgentConfig = AgentConfig(
+    agent_name="reader",
+    description="The read subagent responsible for local document reading with MarkItDown in BioInCoder system",
+    channel="Read_Channel",
+    model=llm,
+    system_prompt=READ_PROMPT + SKILL_PROMPT_FOR_READ,
+    tool_names=tools_for_read,
+)
+
 #BioInCoder_AgentConfig
 tools_for_Coder = [
     "Ask_user_tool",
@@ -205,6 +227,7 @@ tools_for_Coder = [
     "List_saved_message_refs",
     "Academic_search",
     "Browser_browse",
+    "Read_artifact",
     "Write_plan",
     "Update_checklist",
     "Advance_checklist",
@@ -233,7 +256,7 @@ BioInCoder_AgentConfig = AgentConfig(
 )
 
 #register agent
-for config in [BioInCoder_AgentConfig, Plan_AgentConfig, Search_AgentConfig, Browser_AgentConfig]:
+for config in [BioInCoder_AgentConfig, Plan_AgentConfig, Search_AgentConfig, Browser_AgentConfig, Read_AgentConfig]:
     agent_registry.register_agent(config)
 
 
