@@ -19,6 +19,7 @@ from Browser_tools import (
     BrowserAuthConfig,
     BrowserCleanup,
     BrowserBrowse,
+    BrowserDownloadArtifact,
     BrowserLoginWithEnv,
     BrowserState,
     CloakBrowserConfig,
@@ -120,6 +121,7 @@ agent_registry.register_tool(name="Agent_browser_help", tool=AgentBrowserHelp())
 agent_registry.register_tool(name="Cloakbrowser_config", tool=CloakBrowserConfig())
 agent_registry.register_tool(name="Browser_cleanup", tool=BrowserCleanup())
 agent_registry.register_tool(name="Browser_auth_config", tool=BrowserAuthConfig())
+agent_registry.register_tool(name="Browser_download_artifact", tool=BrowserDownloadArtifact())
 agent_registry.register_tool(name="Browser_state", tool=BrowserState())
 agent_registry.register_tool(name="Browser_login_with_env", tool=BrowserLoginWithEnv())
 agent_registry.register_tool(name="Browser_browse", tool=BrowserBrowse())
@@ -178,6 +180,7 @@ tools_for_browser = [
     "Agent_browser_command",
     "Browser_cleanup",
     "Browser_auth_config",
+    "Browser_download_artifact",
     "Browser_state",
     "Browser_login_with_env",
 ]

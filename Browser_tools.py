@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import datetime as _dt
+import hashlib
+import mimetypes
 import os
 import json
+import re
 import subprocess
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any, Literal
 
@@ -22,6 +29,7 @@ CLOAKBROWSER_AUTO_CONFIG = os.environ.get("BIOINCODER_CLOAKBROWSER_AUTO_CONFIG",
 BROWSER_HEADLESS = os.environ.get("BIOINCODER_BROWSER_HEADLESS", "1") != "0"
 HEADLESS_AGENT_BROWSER_ARGS = ["--headless", "--disable-gpu"]
 BROWSER_ARTIFACT_DIR = Path.cwd() / "artifacts" / "browser"
+DOWNLOAD_DIR = BROWSER_ARTIFACT_DIR / "downloads"
 _CLOAKBROWSER_ENV_CACHE: dict[str, str] | None = None
 
 ALLOWED_AGENT_BROWSER_COMMANDS = {
@@ -143,6 +151,48 @@ def _browser_auth_path(path: str | None) -> Path:
         raise ValueError("Browser auth state path must stay inside artifacts/browser/auth.")
     candidate.parent.mkdir(parents=True, exist_ok=True)
     return candidate
+
+
+def _safe_download_path(filename: str | None, url: str, content_type: str | None) -> Path:
+    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    if filename and filename.strip():
+        raw_name = Path(filename).name
+    else:
+        parsed = urllib.parse.urlparse(url)
+        raw_name = Path(urllib.parse.unquote(parsed.path)).name
+        if not raw_name:
+            ext = mimetypes.guess_extension((content_type or "").split(";")[0].strip()) or ".bin"
+            raw_name = f"download{ext}"
+    raw_name = re.sub(r"[^A-Za-z0-9._-]+", "_", raw_name).strip("._")
+    if not raw_name:
+        raw_name = "download.bin"
+    stem = Path(raw_name).stem[:120] or "download"
+    suffix = Path(raw_name).suffix[:20]
+    stamp = _dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    candidate = (DOWNLOAD_DIR / f"{stamp}_{stem}{suffix}").resolve()
+    root = DOWNLOAD_DIR.resolve()
+    if root not in candidate.parents:
+        raise ValueError("Download path must stay inside artifacts/browser/downloads.")
+    return candidate
+
+
+def _looks_like_html(path: Path, content_type: str | None) -> bool:
+    if content_type and "html" in content_type.lower():
+        return True
+    try:
+        head = path.read_bytes()[:512].lower()
+    except Exception:
+        return False
+    return b"<html" in head or b"<!doctype html" in head
+
+
+def _looks_like_pdf(path: Path, content_type: str | None) -> bool:
+    if content_type and "pdf" in content_type.lower():
+        return True
+    try:
+        return path.read_bytes()[:5] == b"%PDF-"
+    except Exception:
+        return False
 
 
 def _merge_agent_browser_args(browser_args: str) -> str:
@@ -828,6 +878,146 @@ JSON.stringify({
             )
 
 
+class BrowserDownloadArtifactInput(BaseModel):
+    url: str = Field(
+        ...,
+        description="Direct URL to download, such as a PDF, supplementary table, archive, or dataset file.",
+    )
+    filename: str | None = Field(
+        default=None,
+        description="Optional safe output filename. The file is always saved under artifacts/browser/downloads.",
+    )
+    expected_type: Literal["any", "pdf", "table", "archive", "text"] = Field(
+        default="any",
+        description="Expected artifact type used for validation warnings.",
+    )
+    referer: str | None = Field(
+        default=None,
+        description="Optional Referer header, usually the article or landing page URL.",
+    )
+    timeout_seconds: int | None = Field(
+        default=None,
+        description="Download timeout. Defaults to 180 seconds and is capped at 900 seconds.",
+    )
+    max_bytes: int | None = Field(
+        default=None,
+        description="Maximum bytes to download. Defaults to 100 MB and is capped at 500 MB.",
+    )
+
+
+class BrowserDownloadArtifact(BaseTool):
+    name: str = "browser_download_artifact"
+    description: str = (
+        "Download a direct browser-discovered artifact URL into artifacts/browser/downloads. "
+        "Use for PDFs, supplementary files, tables, archives, or dataset files after BrowserAgent has found the URL. "
+        "Returns file path and validation metadata, and warns when a downloaded PDF looks like an HTML access page."
+    )
+    args_schema: type[BaseModel] = BrowserDownloadArtifactInput
+
+    def _run(
+        self,
+        url: str,
+        filename: str | None = None,
+        expected_type: str = "any",
+        referer: str | None = None,
+        timeout_seconds: int | None = None,
+        max_bytes: int | None = None,
+    ) -> dict[str, Any]:
+        try:
+            parsed = urllib.parse.urlparse(url)
+            if parsed.scheme not in {"http", "https"}:
+                raise ValueError("`url` must be an http(s) URL.")
+            timeout = _positive_int("timeout_seconds", timeout_seconds, default=180, maximum=900)
+            byte_limit = _positive_int("max_bytes", max_bytes, default=100 * 1024 * 1024, maximum=500 * 1024 * 1024)
+
+            headers = {
+                "User-Agent": "Mozilla/5.0 BioInCoder BrowserAgent",
+                "Accept": "*/*",
+            }
+            if referer:
+                headers["Referer"] = referer
+            request = urllib.request.Request(url, headers=headers)
+
+            started_at = time.time()
+            sha256 = hashlib.sha256()
+            bytes_written = 0
+            status_code: int | None = None
+            final_url = url
+            content_type: str | None = None
+            content_length: int | None = None
+
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                status_code = getattr(response, "status", None)
+                final_url = response.geturl()
+                content_type = response.headers.get("Content-Type")
+                length_header = response.headers.get("Content-Length")
+                if length_header and length_header.isdigit():
+                    content_length = int(length_header)
+                    if content_length > byte_limit:
+                        raise ValueError(
+                            f"Remote file is too large: {content_length} bytes exceeds max_bytes={byte_limit}."
+                        )
+                output_path = _safe_download_path(filename, final_url, content_type)
+                with output_path.open("wb") as handle:
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        bytes_written += len(chunk)
+                        if bytes_written > byte_limit:
+                            raise ValueError(f"Download exceeded max_bytes={byte_limit}.")
+                        sha256.update(chunk)
+                        handle.write(chunk)
+
+            is_html = _looks_like_html(output_path, content_type)
+            is_pdf = _looks_like_pdf(output_path, content_type)
+            warnings: list[str] = []
+            if expected_type == "pdf" and not is_pdf:
+                warnings.append("Expected a PDF, but the downloaded file does not look like a PDF.")
+            if is_html:
+                warnings.append("Downloaded content looks like HTML; it may be a login, access-denied, or error page.")
+            if bytes_written == 0:
+                warnings.append("Downloaded file is empty.")
+
+            metadata = {
+                "source_url": url,
+                "final_url": final_url,
+                "referer": referer,
+                "status_code": status_code,
+                "content_type": content_type,
+                "content_length": content_length,
+                "bytes": bytes_written,
+                "sha256": sha256.hexdigest(),
+                "expected_type": expected_type,
+                "looks_like_pdf": is_pdf,
+                "looks_like_html": is_html,
+                "warnings": warnings,
+                "downloaded_at_utc": _dt.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                "elapsed_seconds": round(time.time() - started_at, 3),
+            }
+            metadata_path = output_path.with_suffix(output_path.suffix + ".metadata.json")
+            metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+            return {
+                "ok": not warnings,
+                "file_path": str(output_path),
+                "metadata_path": str(metadata_path),
+                **metadata,
+            }
+        except urllib.error.HTTPError as exc:
+            return tool_error_response(
+                exc,
+                hint=f"Download failed with HTTP status {exc.code}. The URL may require browser login or a different link.",
+            )
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint=(
+                    "browser_download_artifact failed. Use BrowserAgent to find a direct PDF/supplement URL first, "
+                    "and avoid bulk downloads unless explicitly requested."
+                ),
+            )
+
+
 class BrowserBrowseInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -885,6 +1075,7 @@ class BrowserBrowse(BaseTool):
                     "- If CLI syntax is uncertain, inspect agent-browser help/skills first.\n"
                     "- CloakBrowser is the default browser backend; use cloakbrowser_config status/configure if configuration is uncertain.\n"
                     "- If full text, PDF, or supplementary files are blocked, try public metadata/OA routes first. If the page offers access choices, prefer legitimate institutional/library access such as Access through your institution, Institutional login, OpenAthens, Shibboleth, or library proxy; do not choose Buy, Rent, Purchase PDF, or Subscribe unless the user explicitly asks. If institution selection is required, check browser_auth_config first and use the configured institution hint when available. If no institution hint is available, extract a small list of visible options or required input and ask the user instead of guessing. Then load saved auth state or use env-based login if legitimate credentials are configured.\n"
+                    "- For PDF, supplementary file, table, archive, or dataset downloads, first use browser commands to find the direct file URL, then call browser_download_artifact to save it under artifacts/browser/downloads. Report file_path and metadata_path. If the downloaded file looks like HTML/access-denied, treat it as suspect.\n"
                     "- Close the browser/session with agent-browser close when the task is done or the session gets stuck.\n"
                     "- Ask the user promptly whenever browser progress needs the user's choice, confirmation, manual action, credential-related input, or other interaction that should not be guessed. If asking is unavailable, return a need_user_input section for BioInCoder.\n"
                     "- Return concise findings and cite URLs or artifact paths. Do not paste large page contents."

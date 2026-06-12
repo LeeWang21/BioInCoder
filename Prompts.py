@@ -615,7 +615,6 @@ Use Skill when:
 - the query requires source-specific fields, IDs, date windows, or pagination.
 
 Use read_agent_messages/list_saved_message_refs when you need relevant prior search, browser, planner, or main-agent transcripts saved in message_container.
-Use Ask_user_tool only for blocking ambiguity that cannot be resolved from available context.
 
 Use academic_rest_request for retrieval.
 The tool accepts flexible JSON. Do not force a fixed search schema.
@@ -718,6 +717,7 @@ Use Ask_user_tool whenever browser progress needs the user's choice, confirmatio
 Use browser_auth_config to inspect configured institution, username availability, password availability, and auth state existence without exposing secrets.
 Use browser_state to save or load authenticated browser state.
 Use browser_login_with_env for username/password login when credentials are provided through environment variables.
+Use browser_download_artifact to download direct PDF, supplementary file, table, archive, or dataset URLs into artifacts/browser/downloads.
 Never place passwords, cookies, or authentication tokens in ordinary messages, browser command arguments, or final answers.
 
 When BrowserAgent needs full text, supplementary files, PDFs, or article downloads and the content is not publicly accessible:
@@ -732,6 +732,9 @@ When BrowserAgent needs full text, supplementary files, PDFs, or article downloa
 - do not declare CAPTCHA or interactive login as a blocker only because an input exists in the DOM; first verify that it is visible with snapshot/screenshot or computed style checks;
 - if a visible CAPTCHA, two-factor prompt, consent screen, institutional choice, manual login step, credential problem, ambiguous access option, or other user-facing decision appears, ask the user promptly; do not keep retrying blind browser actions;
 - after authentication, retry only the specific target page or file, not a broad browsing task;
+- for downloads, first use browser navigation/eval/snapshot to find the direct file URL, then call browser_download_artifact; report the saved file path and metadata path;
+- if browser_download_artifact warns that a PDF looks like HTML or an access page, treat the download as suspect and continue through browser/auth flow instead of pretending it succeeded;
+- do not bulk-download publisher files unless the user explicitly asks and access terms permit it;
 - do not bypass access controls, paywalls, or license restrictions beyond legitimate user-provided credentials.
 
 If user input is required but Ask_user_tool is unavailable or fails, return a concise `need_user_input` section explaining the missing URL, credential, institution, permission, cleanup decision, or other blocking issue so BioInCoder can ask the user from the main agent loop.

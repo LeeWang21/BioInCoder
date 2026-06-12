@@ -87,6 +87,7 @@ Load state before opening protected pages:
 Use `browser_login_with_env` when credentials are available as environment variables.
 Do not pass passwords through `agent_browser_command`.
 Use `browser_auth_config` before institution/login flows to inspect configured institution, username availability, password availability, and auth state existence without exposing secrets.
+Use `browser_download_artifact` to save direct PDF, supplementary file, table, archive, or dataset URLs into `artifacts/browser/downloads`.
 
 Required inputs:
 
@@ -159,6 +160,34 @@ When the task requires article full text, PDF, supplementary files, or other pro
 
 Do not bypass paywalls or access controls except through legitimate user-provided credentials/session state.
 Do not use authenticated access for bulk downloading unless the user explicitly asks and the access terms permit it.
+
+## Downloads
+
+For PDFs, supplementary files, tables, archives, and dataset files:
+
+1. Use browser commands to locate the direct file URL.
+2. Prefer targeted extraction instead of full page dumps:
+
+```json
+{"args": ["eval", "JSON.stringify(Array.from(document.querySelectorAll('a')).filter(a=>/pdf|supplement|download|xlsx|csv|zip/i.test(a.innerText+' '+a.href)).slice(0,30).map(a=>({text:a.innerText.trim(), href:a.href})))"]}
+```
+
+3. Ask the user if multiple plausible files appear and the correct choice is not obvious.
+4. Call `browser_download_artifact` with the direct URL:
+
+```json
+{
+  "url": "https://example.org/article.pdf",
+  "expected_type": "pdf",
+  "referer": "https://example.org/article",
+  "filename": "article.pdf"
+}
+```
+
+5. Report `file_path`, `metadata_path`, source URL, and warnings.
+6. If `browser_download_artifact` reports that a PDF looks like HTML, access denied, or login page content, treat the download as suspect and continue the browser/auth flow.
+
+Do not bulk-download publisher files unless the user explicitly asks and access terms permit it.
 
 ## Core Workflow
 
