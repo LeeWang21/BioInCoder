@@ -425,11 +425,12 @@ class AcademicRestRequest(BaseTool):
 class AcademicSearchInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    objective: str = Field(
+    task_brief: str = Field(
         ...,
         description=(
-            "The academic search objective. Include the scientific question, target entities, "
-            "source preferences, date constraints, expected output, or other search constraints if known."
+            "Detailed task brief for SearchAgent. Include the search goal, scientific context, target entities, "
+            "scope boundaries, source preferences, date constraints, expected output, stopping condition, "
+            "and any handoff requirements such as URLs/DOIs/PMIDs needed by BrowserAgent."
         ),
     )
     runtime: ToolRuntime
@@ -447,8 +448,8 @@ class AcademicSearch(BaseTool):
 
     def _run(
         self,
-        objective: str,
         runtime: ToolRuntime,
+        task_brief: str,
     ):
         try:
             from AgentConfigSetup import multi_agent_runtime
@@ -460,11 +461,11 @@ class AcademicSearch(BaseTool):
 
             search_instruction = HumanMessage(
                 content=(
-                    "Perform an academic search for the following objective.\n\n"
+                    "Perform an academic search for the following delegated task brief.\n\n"
                     f"# Current date\n{date.today().isoformat()}\n\n"
-                    f"# Objective\n{objective}\n\n"
+                    f"# Task brief\n{task_brief}\n\n"
                     "Use available search skills to construct database-specific JSON requests. "
-                    "Choose appropriate sources and result depth from the objective and current context. "
+                    "Choose appropriate sources and result depth from the task brief and current context. "
                     "When the search involves recency or a date window, calculate exact date ranges from the current date above. "
                     "For literature retrieval, return a reasonably broad result set instead of stopping at only a few papers. "
                     "Use academic_rest_request for retrieval. "
@@ -514,5 +515,5 @@ class AcademicSearch(BaseTool):
             return tool_error_command(
                 exc,
                 tool_call_id=runtime.tool_call_id,
-                hint="SearchAgent failed. Retry academic_search with a narrower objective or inspect saved messages.",
+                hint="SearchAgent failed. Retry academic_search with a clearer, narrower task_brief or inspect saved messages.",
             )

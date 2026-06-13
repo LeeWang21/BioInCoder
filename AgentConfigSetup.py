@@ -8,7 +8,7 @@ from Ask_user_tool import AskUserTool
 from Message_tools import ReadAgentMessages, ListSavedMessageRefs
 from Skill_tool import SkillTool, generate_skill_tool_prompt
 from Todo_tools import WritePlan, UpdateChecklist, AdvanceChecklist
-from LLM import llm
+from LLM import llm, llm_flash
 from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, BIOINCODER_PROMPT
 from Runtime import MultiAgentRuntime
 from jupytercode_tool import JupyterCodeToolkit, JUPYTER_REGISTRY
@@ -167,7 +167,7 @@ Search_AgentConfig = AgentConfig(
     agent_name = "search",
     description = "The search subagent responsible for academic literature and scholarly metadata retrieval in BioInCoder system",
     channel = "Search_Channel",
-    model = llm,
+    model = llm_flash,
     system_prompt = SEARCH_PROMPT + SKILL_PROMPT_FOR_SEARCH,
     tool_names = tools_for_search,
 )
@@ -213,7 +213,7 @@ Read_AgentConfig = AgentConfig(
     agent_name="reader",
     description="The read subagent responsible for local document reading with MarkItDown in BioInCoder system",
     channel="Read_Channel",
-    model=llm,
+    model=llm_flash,
     system_prompt=READ_PROMPT + SKILL_PROMPT_FOR_READ,
     tool_names=tools_for_read,
 )

@@ -1021,11 +1021,12 @@ class BrowserDownloadArtifact(BaseTool):
 class BrowserBrowseInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    objective: str = Field(
+    task_brief: str = Field(
         ...,
         description=(
-            "The browser task objective. Include target URL, what to inspect or extract, constraints, "
-            "and whether screenshots/artifacts are needed."
+            "Detailed task brief for BrowserAgent. Include the browser goal, target URL(s), what to inspect/extract/download, "
+            "scope boundaries, actions that are allowed or forbidden, user interaction requirements, expected artifacts/output, "
+            "handoff information for ReadAgent, and a stopping condition."
         ),
     )
     runtime: ToolRuntime
@@ -1049,8 +1050,8 @@ class BrowserBrowse(BaseTool):
 
     def _run(
         self,
-        objective: str,
         runtime: ToolRuntime,
+        task_brief: str,
         cleanup_session_name: str | None = None,
     ):
         cleanup_result = None
@@ -1065,9 +1066,10 @@ class BrowserBrowse(BaseTool):
             browser_instruction = HumanMessage(
                 content=(
                     "Perform the following browser task with agent-browser CLI using CloakBrowser by default.\n\n"
-                    f"# Objective\n{objective}\n\n"
+                    f"# Task brief\n{task_brief}\n\n"
                     "# Operating constraints\n"
                     "- Use the smallest number of browser commands and the smallest context needed.\n"
+                    "- Stay within the task brief. Do not do ReadAgent work such as local document reading or spreadsheet analysis after download; return downloaded file paths for handoff instead.\n"
                     "- Use an explicit agent-browser --session name for the task.\n"
                     "- Prefer targeted snapshots, text extraction, and URLs over full-page dumps.\n"
                     "- When only part of a page matters, use agent-browser eval or scoped snapshots to filter before extracting text.\n"
@@ -1120,7 +1122,7 @@ class BrowserBrowse(BaseTool):
             return tool_error_command(
                 exc,
                 tool_call_id=runtime.tool_call_id,
-                hint="BrowserAgent failed. Retry browser_browse with a narrower objective or inspect saved messages.",
+                hint="BrowserAgent failed. Retry browser_browse with a clearer, narrower task_brief or inspect saved messages.",
             )
         finally:
             try:

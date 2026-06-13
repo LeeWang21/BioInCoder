@@ -407,9 +407,12 @@ class MarkItDownCommand(BaseTool):
 class ReadArtifactInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    objective: str = Field(
+    task_brief: str = Field(
         ...,
-        description="The reading objective. Include what to find, summarize, extract, or verify.",
+        description=(
+            "Detailed task brief for ReadAgent. Include the reading goal, target content, scope boundaries, "
+            "keywords/tables/sheets/sections to inspect, output format, limitations, and stopping condition."
+        ),
     )
     file_path: str = Field(
         ...,
@@ -429,9 +432,9 @@ class ReadArtifact(BaseTool):
 
     def _run(
         self,
-        objective: str,
         file_path: str,
         runtime: ToolRuntime,
+        task_brief: str,
     ):
         try:
             from AgentConfigSetup import multi_agent_runtime
@@ -444,15 +447,16 @@ class ReadArtifact(BaseTool):
             read_instruction = HumanMessage(
                 content=(
                     "Perform the following local document reading task.\n\n"
-                    f"# Objective\n{objective}\n\n"
+                    f"# Task brief\n{task_brief}\n\n"
                     f"# File\n{file_path}\n\n"
                     "# Operating constraints\n"
                     "- Use markitdown_command for quick document-to-Markdown conversion and targeted text extraction.\n"
+                    "- Stay within the task brief. Do not browse the web, search literature, or perform computational analysis beyond reading the provided file.\n"
                     "- Keep returned context small with pipe_commands and max_output_chars.\n"
                     "- For large files or narrow objectives, prefer safe stdout pipelines such as [['grep','-i','keyword'], ['head','-n','120']] before returning text.\n"
                     "- Save converted Markdown when useful and report output_path.\n"
                     "- For Excel/PowerPoint/Word/PDF, do not dump the whole file unless the user explicitly asks.\n"
-                    "- If the objective mentions a specific keyword, table, sheet, section, or figure, search/filter for that target first.\n"
+                    "- If the task brief mentions a specific keyword, table, sheet, section, or figure, search/filter for that target first.\n"
                     "- Return concise findings with file path, converted artifact path, and any limitations."
                 )
             )
@@ -489,5 +493,5 @@ class ReadArtifact(BaseTool):
             return tool_error_command(
                 runtime,
                 exc,
-                hint="ReadAgent failed. Retry read_artifact with a narrower objective or inspect saved messages.",
+                hint="ReadAgent failed. Retry read_artifact with a clearer, narrower task_brief or inspect saved messages.",
             )

@@ -74,11 +74,11 @@ def _format_plan(plan: dict) -> str:
 
 class WritePlanInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True) #allow arbitrary types so Pydantic accepts ToolRuntime 
-    objective: str = Field(
+    task_brief: str = Field(
         ...,
         description=(
-            "The concrete user goal that needs a plan. "
-            "Restate the actual task to be planned, including important constraints, files, data, or expected outputs if known. "
+            "Detailed task brief for Planner. Include the user goal, context, known files/data, scope boundaries, "
+            "constraints, assumptions, expected deliverables, validation criteria, and what should not be executed during planning. "
             "Do not pass vague text like 'make a plan' unless that is the full user request."
         )
     )
@@ -90,18 +90,18 @@ class WritePlanInput(BaseModel):
 class WritePlan(BaseTool):
     name: str = "write_plan"
     description: str = (
-        "Create or reset a plan composed of structured plan overview and plan checklist for the current user objective. "
+        "Create or reset a plan composed of structured plan overview and plan checklist for the current user task. "
         "Use this tool when the task is complex, multi-step, ambiguous, requires tools/files/code/data, "
-        "or when progress tracking would help. "
-        "or both previous plan overview and plan checklist require major revision"
-        "The tool calls a planner subagent using the current conversation/runtime state and the provided objective. "
+        "or when progress tracking would help, "
+        "or both previous plan overview and plan checklist require major revision. "
+        "The tool calls a planner subagent using the current conversation/runtime state and the provided task_brief. "
         "It returns a human- and agent-readable planning brief plus an ordered checklist with statuses. "
         "Do not use this tool for simple one-step questions, direct factual answers, trivial rewrites, checklist minor revision or checklist status change. "
         "This tool only plans; it does not execute the task, modify files, run analysis, or produce the final deliverable."
     )
     args_schema: Type[BaseModel] = WritePlanInput
 
-    def _run(self, objective: str, runtime: ToolRuntime):
+    def _run(self, runtime: ToolRuntime, task_brief: str):
         try:
             from AgentConfigSetup import multi_agent_runtime
 
@@ -114,8 +114,8 @@ class WritePlan(BaseTool):
 
             planner_instruction = HumanMessage(
                 content=(
-                    "Create or update the execution plan for the following objective.\n\n"
-                    f"# Objective\n{objective}\n\n"
+                    "Create or update the execution plan for the following delegated task brief.\n\n"
+                    f"# Task brief\n{task_brief}\n\n"
                     "Use the current conversation and runtime state as context. "
                     "If a plan already exists in context, reset it for major revision instead of starting from scratch. "
                     "Return only the required PlanOutputFormat structured output."
@@ -168,7 +168,7 @@ class WritePlan(BaseTool):
             return tool_error_command(
                 exc,
                 tool_call_id=runtime.tool_call_id,
-                hint="Planner subagent failed. Retry write_plan with a clearer objective or inspect logs.",
+                hint="Planner subagent failed. Retry write_plan with a clearer task_brief or inspect logs.",
             )
     
 
