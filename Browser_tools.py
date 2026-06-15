@@ -1073,6 +1073,7 @@ class BrowserBrowse(BaseTool):
                     "- Use an explicit agent-browser --session name for the task.\n"
                     "- Prefer targeted snapshots, text extraction, and URLs over full-page dumps.\n"
                     "- When only part of a page matters, use agent-browser eval or scoped snapshots to filter before extracting text.\n"
+                    "- When results, links, downloads, tables, or evidence may span multiple pages, detect pagination/load-more/infinite-scroll controls before concluding from page 1. Follow additional pages when the task asks for comprehensive coverage or the needed item is not found yet. Use compact per-page eval summaries, wait after each page change, and report if only page 1 was inspected.\n"
                     "- After opening a page or any navigation/action, wait patiently with agent-browser wait before reading state.\n"
                     "- If CLI syntax is uncertain, inspect agent-browser help/skills first.\n"
                     "- CloakBrowser is the default browser backend; use cloakbrowser_config status/configure if configuration is uncertain.\n"

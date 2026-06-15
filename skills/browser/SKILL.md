@@ -282,6 +282,44 @@ Small structured extraction:
 {"args": ["eval", "JSON.stringify(Array.from(document.querySelectorAll('a')).slice(0,20).map(a=>({text:a.innerText, href:a.href})))"]}
 ```
 
+## Pagination / Multi-page Results
+
+If a task involves search results, article lists, tables, dataset lists, file lists, comments, or any page where the target item may not be on the first screen/page, check for pagination before concluding.
+
+Use lightweight detection first:
+
+```json
+{"args": ["eval", "JSON.stringify({url:location.href,title:document.title,textMatches:Array.from(document.querySelectorAll('a,button,[role=\"button\"]')).filter(e=>/next|more|load|下一页|下页|更多|后页|›|»/i.test(e.innerText||e.getAttribute('aria-label')||e.title||'')).slice(0,20).map(e=>({tag:e.tagName,text:(e.innerText||e.getAttribute('aria-label')||e.title||'').trim(),href:e.href||'',disabled:e.disabled||e.getAttribute('aria-disabled')||e.className}))})"]}
+```
+
+For result lists, extract compact page summaries:
+
+```json
+{"args": ["eval", "JSON.stringify(Array.from(document.querySelectorAll('article,li,tr,.result,.search-result')).slice(0,30).map((e,i)=>({i,text:e.innerText.trim().replace(/\\s+/g,' ').slice(0,300),href:e.querySelector('a')?.href||''})))"]}
+```
+
+Continue to the next page or click "load more" when:
+
+- the task asks for all/comprehensive results;
+- the requested item is not found on the current page;
+- the page reports more total results than currently visible;
+- relevant downloads or supplementary files are likely split across pages/tabs.
+
+After each pagination action, wait before extracting:
+
+```json
+{"args": ["wait", "--load", "networkidle"], "timeout_seconds": 120}
+```
+
+Stop pagination when:
+
+- the requested item or enough evidence has been found;
+- the next/load-more control is disabled or absent;
+- several pages are irrelevant to the task;
+- a task-specific page limit from the user has been reached.
+
+Do not dump every page. Return compact per-page findings and mention the page range inspected. If only page 1 was inspected, say that explicitly in Notes / Limitations.
+
 Diagnostics and state:
 
 ```json

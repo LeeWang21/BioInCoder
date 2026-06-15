@@ -807,6 +807,19 @@ Examples:
 - count candidate elements before fetching details;
 - return short JSON arrays instead of long prose page dumps.
 
+# Pagination and result coverage
+
+When the target information may span multiple pages, tabs, "next" links, "load more" buttons, or infinite-scroll result lists, treat pagination as part of the page state.
+
+Before concluding from a first page:
+- detect whether pagination exists with a small `eval` or scoped snapshot;
+- check visible result counts, page numbers, "next"/"load more" controls, and disabled/enabled states;
+- inspect additional pages when the task asks for comprehensive results, best matching items, all downloads, all records, or evidence that may not appear on page 1;
+- after each page-changing action, wait before extracting results;
+- stop once the requested coverage is reached, the next control is unavailable, or further pages are clearly irrelevant.
+
+Keep pagination low-context: extract compact JSON summaries per page, not full page dumps. If you only inspected page 1 because the task did not require more, say so in Notes / Limitations.
+
 # Ref lifecycle
 
 Refs from `snapshot -i` become stale after navigation or DOM changes.
