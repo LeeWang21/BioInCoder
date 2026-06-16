@@ -9,9 +9,9 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph.message import AnyMessage, add_messages
 
 # =========================
-# MultiAgentSate
+# BioInCoderState
 # =========================
-class MultiAgentState(TypedDict, total=False):
+class BioInCoderState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
     plan: dict
 

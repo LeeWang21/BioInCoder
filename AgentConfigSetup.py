@@ -10,7 +10,7 @@ from Skill_tool import SkillTool, generate_skill_tool_prompt
 from Todo_tools import WritePlan, UpdateChecklist, AdvanceChecklist
 from LLM import llm, llm_flash
 from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, BIOINCODER_PROMPT
-from Runtime import MultiAgentRuntime
+from Runtime import MultiAgentRuntime, BioInCoderState
 from jupytercode_tool import JupyterCodeToolkit, JUPYTER_REGISTRY
 from Search_tools import AcademicRestRequest, AcademicSearch
 from Browser_tools import (
@@ -256,6 +256,7 @@ BioInCoder_AgentConfig = AgentConfig(
     model = llm,
     system_prompt = BIOINCODER_PROMPT + SKILL_PROMPT_FOR_CODER,
     tool_names = tools_for_Coder,
+    state_schema = BioInCoderState,
     checkpointer = ckpt
 )
 

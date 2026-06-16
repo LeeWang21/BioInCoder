@@ -36,6 +36,7 @@ class AgentConfig:
     tools: Sequence[ToolLike] | None = None
     middleware: Sequence[Any] | None = None
 
+    state_schema: type[Any] | None = None
     response_format: Any | None = None
     context_schema: type[Any] | None = None
     checkpointer: Any | None = None
@@ -100,6 +101,7 @@ class AgentConfig:
             "tools": self.resolve_tools(tool_registry),
             "system_prompt": self.system_prompt,
             "middleware": self.resolve_middleware(middleware_registry),
+            "state_schema": self.state_schema,
             "response_format": self.response_format,
             "context_schema": self.context_schema,
             "checkpointer": self.checkpointer,
