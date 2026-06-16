@@ -1024,9 +1024,11 @@ class BrowserBrowseInput(BaseModel):
     task_brief: str = Field(
         ...,
         description=(
-            "Detailed task brief for BrowserAgent. Include the browser goal, target URL(s), what to inspect/extract/download, "
-            "scope boundaries, actions that are allowed or forbidden, user interaction requirements, expected artifacts/output, "
-            "handoff information for ReadAgent, and a stopping condition."
+            "Self-contained handoff brief for BrowserAgent. Subagents do not receive the full BioInCoder conversation. "
+            "Include: Overall Goal, Current Subtask, Relevant Context, Inputs such as exact target URL(s)/DOIs/PMIDs/message refs, "
+            "Scope Boundary, Required Output, Stop Condition, and Handoff. Specify what page-level evidence or downloads are needed, "
+            "allowed/forbidden actions, access/login constraints, user interaction requirements, session cleanup expectations, "
+            "and which downloaded file paths or artifact metadata should be handed to ReadAgent."
         ),
     )
     runtime: ToolRuntime
@@ -1058,11 +1060,6 @@ class BrowserBrowse(BaseTool):
         try:
             from AgentConfigSetup import multi_agent_runtime
 
-            coder_msgs = runtime.state.get("messages", [])
-            coder_msgs_sanitization = coder_msgs
-            if coder_msgs_sanitization and getattr(coder_msgs_sanitization[-1], "tool_calls", None):
-                coder_msgs_sanitization = coder_msgs_sanitization[:-1]
-
             browser_instruction = HumanMessage(
                 content=(
                     "Perform the following browser task with agent-browser CLI using CloakBrowser by default.\n\n"
@@ -1093,7 +1090,7 @@ class BrowserBrowse(BaseTool):
             )
             browser_state, message_ref = multi_agent_runtime.invoke_agent(
                 agent_name="browser",
-                graph_input={"messages": coder_msgs_sanitization + [browser_instruction]},
+                graph_input={"messages": [browser_instruction]},
                 request_id=request_id,
                 config=browser_config,
             )

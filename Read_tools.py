@@ -410,8 +410,10 @@ class ReadArtifactInput(BaseModel):
     task_brief: str = Field(
         ...,
         description=(
-            "Detailed task brief for ReadAgent. Include the reading goal, target content, scope boundaries, "
-            "keywords/tables/sheets/sections to inspect, output format, limitations, and stopping condition."
+            "Self-contained handoff brief for ReadAgent. Subagents do not receive the full BioInCoder conversation. "
+            "Include: Overall Goal, Current Subtask, Relevant Context, Inputs such as file_path/metadata_path/source URL/message refs, "
+            "Scope Boundary, Required Output, Stop Condition, and Handoff. Specify target content, keywords, fields, tables, sheets, "
+            "sections, snippets to extract, output format, limitations, and a reminder not to browse the web or search literature."
         ),
     )
     file_path: str = Field(
@@ -439,11 +441,6 @@ class ReadArtifact(BaseTool):
         try:
             from AgentConfigSetup import multi_agent_runtime
 
-            coder_msgs = runtime.state.get("messages", [])
-            coder_msgs_sanitization = coder_msgs
-            if coder_msgs_sanitization and getattr(coder_msgs_sanitization[-1], "tool_calls", None):
-                coder_msgs_sanitization = coder_msgs_sanitization[:-1]
-
             read_instruction = HumanMessage(
                 content=(
                     "Perform the following local document reading task.\n\n"
@@ -469,7 +466,7 @@ class ReadArtifact(BaseTool):
             )
             read_state, message_ref = multi_agent_runtime.invoke_agent(
                 agent_name="reader",
-                graph_input={"messages": coder_msgs_sanitization + [read_instruction]},
+                graph_input={"messages": [read_instruction]},
                 request_id=request_id,
                 config=read_config,
             )

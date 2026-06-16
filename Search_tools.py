@@ -428,9 +428,11 @@ class AcademicSearchInput(BaseModel):
     task_brief: str = Field(
         ...,
         description=(
-            "Detailed task brief for SearchAgent. Include the search goal, scientific context, target entities, "
-            "scope boundaries, source preferences, date constraints, expected output, stopping condition, "
-            "and any handoff requirements such as URLs/DOIs/PMIDs needed by BrowserAgent."
+            "Self-contained handoff brief for SearchAgent. Subagents do not receive the full BioInCoder conversation. "
+            "Include: Overall Goal, Current Subtask, Relevant Context, Inputs such as queries/entities/DOIs/PMIDs/URLs, "
+            "Scope Boundary, Required Output, Stop Condition, and Handoff. Include search scope, scientific context, "
+            "target entities, inclusion/exclusion criteria, source preferences, date constraints, desired result breadth, "
+            "required identifiers/URLs, and any BrowserAgent follow-up requirements."
         ),
     )
     runtime: ToolRuntime
@@ -453,11 +455,6 @@ class AcademicSearch(BaseTool):
     ):
         try:
             from AgentConfigSetup import multi_agent_runtime
-
-            coder_msgs = runtime.state.get("messages", [])
-            coder_msgs_sanitization = coder_msgs
-            if coder_msgs_sanitization and getattr(coder_msgs_sanitization[-1], "tool_calls", None):
-                coder_msgs_sanitization = coder_msgs_sanitization[:-1]
 
             search_instruction = HumanMessage(
                 content=(
@@ -482,7 +479,7 @@ class AcademicSearch(BaseTool):
             )
             search_state, message_ref = multi_agent_runtime.invoke_agent(
                 agent_name="search",
-                graph_input={"messages": coder_msgs_sanitization + [search_instruction]},
+                graph_input={"messages": [search_instruction]},
                 request_id=request_id,
                 config=search_config,
             )

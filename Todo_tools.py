@@ -77,9 +77,10 @@ class WritePlanInput(BaseModel):
     task_brief: str = Field(
         ...,
         description=(
-            "Detailed task brief for Planner. Include the user goal, context, known files/data, scope boundaries, "
-            "constraints, assumptions, expected deliverables, validation criteria, and what should not be executed during planning. "
-            "Do not pass vague text like 'make a plan' unless that is the full user request."
+            "Self-contained handoff brief for Planner. Subagents do not receive the full BioInCoder conversation. "
+            "Include: Overall Goal, Current Subtask, Relevant Context, Inputs such as files/data/URLs/IDs, Scope Boundary, "
+            "Required Output, Stop Condition, and Handoff. Include user constraints, assumptions, expected deliverables, "
+            "validation criteria, and what should not be executed during planning. Prefer detailed structured text over a vague request."
         )
     )
     runtime: ToolRuntime
@@ -105,13 +106,6 @@ class WritePlan(BaseTool):
         try:
             from AgentConfigSetup import multi_agent_runtime
 
-            coder_msgs = runtime.state.get("messages", [])
-
-            coder_msgs_sanitization = coder_msgs
-            if coder_msgs_sanitization and getattr(coder_msgs_sanitization[-1], "tool_calls", None):
-                coder_msgs_sanitization = coder_msgs_sanitization[:-1]
-
-
             planner_instruction = HumanMessage(
                 content=(
                     "Create or update the execution plan for the following delegated task brief.\n\n"
@@ -130,9 +124,7 @@ class WritePlan(BaseTool):
             )
             plan_state, message_ref = multi_agent_runtime.invoke_agent(
                 agent_name="planner",
-                graph_input={
-                    "messages": coder_msgs_sanitization + [planner_instruction],
-                },
+                graph_input={"messages": [planner_instruction]},
                 request_id=request_id,
                 config=planner_config,
             )

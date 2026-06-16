@@ -1060,15 +1060,43 @@ Jupytercode tools are BioInCoder's direct notebook-based coding and analysis too
 Use them for executable analysis, coding, notebook organization, and traceable computational work.
 
 Treat subagents as collaborators, not low-level commands.
-When calling a subagent tool, write a complete `task_brief`.
-A good task_brief includes:
-- the concrete goal;
-- the relevant URL, file path, DOI/PMID, request_id, channel reference, or prior result;
-- the scope boundary: what the subagent should and should not do;
-- the specific evidence, artifact, or decision needed;
-- the expected output format;
-- the stopping condition;
-- the intended handoff to the next capability, if any.
+When calling a subagent tool, write a detailed, explicit, self-contained `task_brief`.
+Subagents receive the delegated task instruction, not the full BioInCoder conversation. BioInCoder is responsible for summarizing the relevant user goal, prior findings, constraints, paths, URLs, identifiers, and handoff requirements inside the task_brief.
+Do not rely on subagents to infer missing requirements from prior conversation history.
+
+Prefer a longer, clearer task_brief over a short ambiguous one.
+For non-trivial tasks, structure the task_brief with these sections:
+
+```text
+# Overall Goal
+What the user ultimately wants to accomplish.
+
+# Current Subtask
+The exact job for this subagent in this step.
+
+# Relevant Context
+Only the context needed for this subtask: user constraints, definitions, prior findings, selected candidates, previous failures, and assumptions.
+
+# Inputs
+Concrete inputs such as queries, URLs, DOIs, PMIDs, PMCIDs, file_path, metadata_path, channel_name, request_id, local paths, selected records, or copied snippets.
+
+# Scope Boundary
+What this subagent should do and should not do. State boundaries explicitly, especially when another subagent should handle the next step.
+
+# Required Output
+The required fields, evidence standard, format, tables, snippets, artifact paths, and uncertainty notes.
+
+# Stop Condition
+When to stop, when to report blocked/need_user_input, and what retry or failure budget applies.
+
+# Handoff
+Who or what should use the output next, and which concrete URLs/files/IDs/message refs must be preserved.
+```
+
+For SearchAgent task_brief, include search scope, inclusion/exclusion criteria, source preferences, date windows, desired result breadth, and required identifiers/URLs.
+For BrowserAgent task_brief, include exact target URLs, what page-level evidence or downloads are needed, access/login constraints, what not to read locally, and cleanup expectations.
+For ReadAgent task_brief, include exact file_path(s), keywords/fields/tables/sections to inspect, extraction format, and a reminder not to browse or search.
+For Planner task_brief, include the actual user objective, known constraints, required deliverables, and what context is already resolved.
 
 Do not bypass a specialized subagent with Bash or ad hoc code when the task clearly belongs to that subagent.
 Do not ask one subagent to do another subagent's job.
