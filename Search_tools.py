@@ -80,6 +80,12 @@ def _positive_int(name: str, value: Any, default: int, maximum: int | None = Non
     return out
 
 
+def _optional_positive_int(name: str, value: Any, maximum: int | None = None) -> int | None:
+    if value is None:
+        return None
+    return _positive_int(name, value, 1, maximum=maximum)
+
+
 def _build_url(base_url: str, path: str) -> str:
     if path.startswith(("http://", "https://")):
         return path
@@ -149,7 +155,7 @@ def _infer_target(data: Any) -> tuple[str | None, Any]:
     return None, data
 
 
-def _compact(value: Any, max_items: int, max_depth: int, max_string: int) -> Any:
+def _compact(value: Any, max_items: int | None, max_depth: int, max_string: int) -> Any:
     if isinstance(value, str):
         return value if len(value) <= max_string else value[:max_string] + "..."
     if max_depth <= 0:
@@ -157,16 +163,18 @@ def _compact(value: Any, max_items: int, max_depth: int, max_string: int) -> Any
             return "..."
         return value
     if isinstance(value, list):
-        out = [_compact(item, max_items, max_depth - 1, max_string) for item in value[:max_items]]
-        if len(value) > max_items:
+        items = value if max_items is None else value[:max_items]
+        out = [_compact(item, max_items, max_depth - 1, max_string) for item in items]
+        if max_items is not None and len(value) > max_items:
             out.append(f"... (+{len(value) - max_items} more)")
         return out
     if isinstance(value, dict):
         out: dict[str, Any] = {}
         items = list(value.items())
-        for key, item in items[:max_items]:
+        selected_items = items if max_items is None else items[:max_items]
+        for key, item in selected_items:
             out[str(key)] = _compact(item, max_items, max_depth - 1, max_string)
-        if len(items) > max_items:
+        if max_items is not None and len(items) > max_items:
             out["_truncated_keys"] = len(items) - max_items
         return out
     return value
@@ -264,7 +272,7 @@ def _normalize_request(payload: dict[str, Any]) -> dict[str, Any]:
         "form_body": _require_dict("form_body", form_body) if form_body is not None else None,
         "record_path": _require_str("record_path", payload.get("record_path")),
         "response_format": response_format,
-        "max_items": _positive_int("max_items", payload.get("max_items"), 30, maximum=200),
+        "max_items": _optional_positive_int("max_items", payload.get("max_items")),
         "max_depth": _positive_int("max_depth", payload.get("max_depth"), 4, maximum=8),
         "max_string": _positive_int("max_string", payload.get("max_string"), 500, maximum=3000),
         "text_head_chars": _positive_int("text_head_chars", payload.get("text_head_chars"), 2500, maximum=12000),
@@ -358,7 +366,7 @@ class AcademicRestRequest(BaseTool):
                 }
 
                 if isinstance(target, list):
-                    records = target[: config["max_items"]]
+                    records = target if config["max_items"] is None else target[: config["max_items"]]
                     out.update(
                         {
                             "record_count_returned": len(records),
@@ -380,7 +388,11 @@ class AcademicRestRequest(BaseTool):
                         config["max_string"],
                     )
                     if isinstance(target, dict):
-                        out["top_keys"] = list(target)[: config["max_items"]]
+                        out["top_keys"] = (
+                            list(target)
+                            if config["max_items"] is None
+                            else list(target)[: config["max_items"]]
+                        )
                 return out
 
             if config["save_raw"]:
@@ -432,7 +444,9 @@ class AcademicSearchInput(BaseModel):
             "Include: Overall Goal, Current Subtask, Relevant Context, Inputs such as queries/entities/DOIs/PMIDs/URLs, "
             "Scope Boundary, Required Output, Stop Condition, and Handoff. Include search scope, scientific context, "
             "target entities, inclusion/exclusion criteria, source preferences, date constraints, desired result breadth, "
-            "required identifiers/URLs, and any BrowserAgent follow-up requirements."
+            "required identifiers/URLs, and any BrowserAgent follow-up requirements. For broad literature screening or "
+            "as-many-as-possible requests, explicitly request a complete candidate table and let SearchAgent choose "
+            "retrieval depth from the task scope and source behavior rather than summarizing away relevant records."
         ),
     )
     runtime: ToolRuntime
@@ -464,7 +478,10 @@ class AcademicSearch(BaseTool):
                     "Use available search skills to construct database-specific JSON requests. "
                     "Choose appropriate sources and result depth from the task brief and current context. "
                     "When the search involves recency or a date window, calculate exact date ranges from the current date above. "
-                    "For literature retrieval, return a reasonably broad result set instead of stopping at only a few papers. "
+                    "For literature retrieval, return a result set that satisfies the requested coverage goal. "
+                    "If the task asks for comprehensive screening, candidate discovery, broad coverage, or as many relevant papers as possible, "
+                    "do not summarize away relevant records; return a complete candidate table for relevant records retrieved within scope, "
+                    "with IDs/URLs/DOIs and relevance notes. "
                     "Use academic_rest_request for retrieval. "
                     "Return a concise evidence-oriented answer with source names, IDs/URLs/DOIs when available, "
                     "and note unresolved uncertainty. Do not fabricate papers or identifiers."

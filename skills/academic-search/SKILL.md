@@ -34,9 +34,9 @@ Accepted source aliases include:
 
 General rules:
 
-- For literature retrieval, prefer result windows around 50 records by default.
-- Use larger windows or multiple requests when the objective needs broad coverage, recent literature, method comparison, or review-style retrieval.
-- Use small windows only for targeted identifier lookup, DOI lookup, or quick verification.
+- Choose source-specific retrieval scope from the task goal, coverage needs, and source behavior.
+- Use broader retrieval or multiple requests when the objective needs broad coverage, recent literature, method comparison, or review-style retrieval.
+- Use narrow retrieval only for targeted identifier lookup, DOI lookup, or quick verification.
 - When the objective involves recency or a relative time expression, use the runtime current date and convert it to exact date ranges.
 - Use database-supported filters instead of broad free-text dumps.
 - Use `record_path` for JSON APIs when the useful results are nested.
@@ -59,11 +59,9 @@ Base shortcut:
     "db": "pubmed",
     "term": "KRAS AND colorectal cancer",
     "retmode": "json",
-    "retmax": 50,
     "sort": "relevance"
   },
-  "record_path": "esearchresult.idlist",
-  "max_items": 50
+  "record_path": "esearchresult.idlist"
 }
 ```
 
@@ -78,8 +76,7 @@ Follow up IDs with `esummary`:
     "id": "12345678,23456789",
     "retmode": "json"
   },
-  "record_path": "result",
-  "max_items": 50
+  "record_path": "result"
 }
 ```
 
@@ -102,11 +99,9 @@ Use for life-science literature across PubMed, PMC, preprints, DOI, and open-acc
   "params": {
     "query": "single-cell RNA-seq pancreatic cancer",
     "format": "json",
-    "pageSize": 50,
     "sort": "RELEVANCE"
   },
-  "record_path": "resultList.result",
-  "max_items": 50
+  "record_path": "resultList.result"
 }
 ```
 
@@ -118,11 +113,9 @@ Date-limited example:
   "path": "search",
   "params": {
     "query": "(spatial transcriptomics) AND FIRST_PDATE:[2023-01-01 TO 2026-12-31]",
-    "format": "json",
-    "pageSize": 50
+    "format": "json"
   },
-  "record_path": "resultList.result",
-  "max_items": 50
+  "record_path": "resultList.result"
 }
 ```
 
@@ -136,8 +129,7 @@ Recent bioRxiv details:
 {
   "source": "biorxiv",
   "path": "details/biorxiv/2026-01-01/2026-01-31/0/json",
-  "record_path": "collection",
-  "max_items": 50
+  "record_path": "collection"
 }
 ```
 
@@ -147,8 +139,7 @@ DOI lookup:
 {
   "source": "biorxiv",
   "path": "details/biorxiv/10.1101/2024.01.01.123456/na/json",
-  "record_path": "collection",
-  "max_items": 5
+  "record_path": "collection"
 }
 ```
 
@@ -158,8 +149,7 @@ medRxiv uses the same host with `medrxiv` in the path:
 {
   "source": "medrxiv",
   "path": "details/medrxiv/2026-01-01/2026-01-31/0/json",
-  "record_path": "collection",
-  "max_items": 50
+  "record_path": "collection"
 }
 ```
 
@@ -178,13 +168,11 @@ arXiv returns Atom XML. Use `response_format: "xml"` and summarize from `text_he
   "params": {
     "search_query": "all:single cell RNA seq AND cat:q-bio.GN",
     "start": 0,
-    "max_results": 50,
     "sortBy": "relevance",
     "sortOrder": "descending"
   },
   "response_format": "xml",
-  "text_head_chars": 12000,
-  "max_items": 50
+  "text_head_chars": 12000
 }
 ```
 
@@ -204,11 +192,9 @@ Use for broad scholarly lookup, DOI/title search, and cross-disciplinary metadat
   "source": "openalex",
   "path": "works",
   "params": {
-    "search": "spatial transcriptomics tumor microenvironment",
-    "per-page": 50
+    "search": "spatial transcriptomics tumor microenvironment"
   },
-  "record_path": "results",
-  "max_items": 50
+  "record_path": "results"
 }
 ```
 
@@ -222,11 +208,9 @@ Use for broad paper lookup and citation context. Keep requests small.
   "path": "graph/v1/paper/search",
   "params": {
     "query": "single cell RNA-seq pancreatic cancer",
-    "limit": 50,
     "fields": "title,authors,year,venue,url,abstract,externalIds,citationCount"
   },
-  "record_path": "data",
-  "max_items": 50
+  "record_path": "data"
 }
 ```
 

@@ -74,7 +74,7 @@ Ask the user only when a missing criterion would materially change screening.
 
 Use SearchAgent to retrieve a broad candidate set.
 
-For large-scale literature tasks, do not ask SearchAgent for only a few papers. Prefer enough records to avoid missing relevant papers, such as 30-100 candidates when available.
+For large-scale literature tasks, do not accept an incomplete summary as the candidate set. Ask SearchAgent to retrieve records according to the requested coverage goal and to explain whether coverage was constrained by query specificity, source coverage, deduplication, relevance filtering, or source behavior.
 
 SearchAgent output must include a candidate table with:
 
@@ -367,7 +367,7 @@ Do not open webpages, download files, or read local artifacts.
 Return a complete candidate table with candidate_id, title, year, journal/source, PMID, PMCID, DOI, URL, source_database, relevance_reason, provisional_priority, and screening_notes.
 
 # Stop Condition
-Stop after [N] relevant candidates, exhausted selected databases, or clear source limitations.
+Stop after the requested coverage goal is reached, selected databases are exhausted, or clear source limitations prevent further retrieval.
 
 # Handoff
 BioInCoder will prioritize candidates and send individual papers to BrowserAgent.

@@ -542,9 +542,16 @@ Avoid broad unfiltered searches that return noisy records.
 # Query construction
 
 Construct compact, explicit JSON requests.
-For literature retrieval, prefer result windows around 50 records by default.
-Use larger windows or multiple requests when the objective asks for broad coverage, review-style retrieval, recent papers, or method comparison.
-Use smaller windows only for targeted identifier lookup or quick verification.
+Choose source parameters and result depth from the task scope, coverage goal,
+and source behavior. Use broader retrieval or multiple requests when the
+objective asks for comprehensive coverage, review-style retrieval, recent
+papers, method comparison, or candidate screening. Use narrow retrieval for
+exact identifier lookup, DOI/title verification, or quick targeted answers.
+When the task asks to find papers comprehensively, screen literature, build a
+candidate set, or find as many relevant papers as possible, do not stop before
+the requested coverage is satisfied. Return the relevant records found within the requested
+scope, and explain any source limits, query limits, deduplication, or relevance
+filtering that affected coverage.
 Use source-supported date, field, and sort parameters when relevant.
 When recency or a date window matters, use the runtime current date and write exact dates in the query.
 Use record_path to extract the useful records from JSON responses.
@@ -583,7 +590,14 @@ Return a concise Markdown summary:
 State what was searched and which sources were used.
 
 ## Key Results
-List enough relevant records to support the objective. For ordinary literature searches, return around 20-30 high-signal records when available; for broad review-style tasks, return more and mention where the complete trace is saved.
+For targeted searches, list enough relevant records to support the objective.
+For broad, review-style, screening, dataset/resource discovery, or "as many as
+possible" tasks, return the complete candidate table produced in this search,
+not only a selective summary. Include essential fields for every candidate:
+title, year, source/journal, DOI/PMID/PMCID when available, URL, source
+database, and relevance reason. If the table is too large for a single compact
+answer, return a staged table with candidate IDs and essential fields, then
+state what remains to retrieve or screen.
 
 ## Notes / Limitations
 Mention preprint status, source limitations, failed requests, ambiguity, or whether more retrieval is needed.
