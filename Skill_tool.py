@@ -45,11 +45,13 @@ Important:
     args_schema: type[BaseModel] = SkillToolInput
     # Private internal cache. This is not exposed as a tool field or argument.
     _registry: Any = PrivateAttr(default=None)
+    _agent_name: Optional[str] = PrivateAttr(default=None)
 
 
-    def __init__(self, **kwargs):
+    def __init__(self, agent_name: Optional[str] = None, **kwargs):
         super().__init__(**kwargs)
         self._registry = None
+        self._agent_name = agent_name
 
     @property
     def registry(self):
@@ -102,12 +104,21 @@ Important:
         skill_obj = self.registry.get(skill)
 
         if skill_obj is None:
-            available = [s.name for s in self.registry.list_all()]
+            available = [s.name for s in self.registry.list_all(agent_name=self._agent_name)]
             return {
                 "success": False,
                 "error": f"Unknown skill: {skill}",
                 "available_skills": available[:10],  # Show first 10
                 "hint": "Use one of the available skills listed above"
+            }
+
+        if not skill_obj.is_available_to(self._agent_name):
+            available = [s.name for s in self.registry.list_all(agent_name=self._agent_name)]
+            return {
+                "success": False,
+                "error": f"Skill is not available to this agent: {skill}",
+                "available_skills": available[:10],
+                "hint": "Use a skill listed in this agent's <available_skills> block.",
             }
 
         # Get the skill prompt
@@ -139,8 +150,12 @@ Important:
             return False, "Skill name is required"
 
         if not self.registry.exists(skill):
-            available = [s.name for s in self.registry.list_all()]
+            available = [s.name for s in self.registry.list_all(agent_name=self._agent_name)]
             return False, f"Unknown skill: {skill}. Available: {', '.join(available[:5])}"
+
+        if not self.registry.get(skill).is_available_to(self._agent_name):
+            available = [s.name for s in self.registry.list_all(agent_name=self._agent_name)]
+            return False, f"Skill not available to this agent: {skill}. Available: {', '.join(available[:5])}"
 
         return True, None
 
@@ -154,10 +169,10 @@ Important:
         Returns:
             Formatted skills prompt
         """
-        return self.registry.generate_skills_prompt(char_budget)
+        return self.registry.generate_skills_prompt(char_budget, agent_name=self._agent_name)
 
 
-def generate_skill_tool_prompt() -> str:
+def generate_skill_tool_prompt(agent_name: Optional[str] = None) -> str:
     """
     Generate the complete skill tool prompt including available skills.
 
@@ -169,7 +184,7 @@ def generate_skill_tool_prompt() -> str:
     from Skill_loader import load_skills
 
     registry = load_skills()
-    skills = registry.list_all()
+    skills = registry.list_all(agent_name=agent_name)
 
     if not skills:
         return """Execute a skill within the main conversation.

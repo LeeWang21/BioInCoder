@@ -80,14 +80,21 @@ class SkillRegistry:
         """
         return name in self._skills
 
-    def list_all(self) -> List[Skill]:
+    def list_all(self, agent_name: Optional[str] = None) -> List[Skill]:
         """
         Get all registered skills.
 
+        Args:
+            agent_name: Optional agent name used to filter skills by
+                metadata.intended_agent.
+
         Returns:
-            List of all skills
+            List of all skills visible to the agent
         """
-        return list(self._skills.values())
+        skills = list(self._skills.values())
+        if agent_name is None:
+            return skills
+        return [skill for skill in skills if skill.is_available_to(agent_name)]
 
     def list_by_location(self, location: str) -> List[Skill]:
         """
@@ -107,7 +114,11 @@ class SkillRegistry:
         for location in self._skills_by_location:
             self._skills_by_location[location].clear()
 
-    def generate_skills_prompt(self, char_budget: int = 10000) -> str:
+    def generate_skills_prompt(
+        self,
+        char_budget: int = 10000,
+        agent_name: Optional[str] = None,
+    ) -> str:
         """
         Generate a prompt listing all available skills.
 
@@ -115,11 +126,13 @@ class SkillRegistry:
 
         Args:
             char_budget: Maximum characters for skills list
+            agent_name: Optional agent name used to filter skills by
+                metadata.intended_agent
 
         Returns:
             Formatted skills prompt
         """
-        skills = self.list_all()
+        skills = self.list_all(agent_name=agent_name)
 
         if not skills:
             return ""

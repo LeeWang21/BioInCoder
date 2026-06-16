@@ -4,6 +4,7 @@ description: Use BioInCoder BrowserAgent with agent-browser CLI and CloakBrowser
 metadata:
   tool_type: browser
   primary_tool: agent_browser_command
+  intended_agent: browser
 ---
 
 # BioInCoder Browser

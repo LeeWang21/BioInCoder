@@ -4,6 +4,7 @@ description: Use BioInCoder ReadAgent with MarkItDown for quick local document r
 metadata:
   tool_type: read
   primary_tool: markitdown_command
+  intended_agent: reader
 ---
 
 # BioInCoder Read

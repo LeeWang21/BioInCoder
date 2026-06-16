@@ -4,6 +4,7 @@ description: Construct flexible JSON requests for BioInCoder academic_search usi
 metadata:
   tool_type: search
   primary_tool: academic_rest_request
+  intended_agent: search
 ---
 
 # BioInCoder Academic Search

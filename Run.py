@@ -129,7 +129,7 @@ def main() -> None:
                         if user_answer is None:
                             print("\nExiting.")
                             return
-                        if user_answer.lower() in {"exit", "quit", "/exit", "/quit"}:
+                        if user_answer.lower() in {"/exit", "/quit"}:
                             print("Exiting.")
                             return
                         graph_input = Command(resume=user_answer)

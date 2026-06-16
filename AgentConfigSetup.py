@@ -109,7 +109,11 @@ ckpt = InMemorySaver()
 #register_tool
 agent_registry.register_tool(name="Bash_tool", tool=ShellTool(name = "Bash"))
 agent_registry.register_tool(name="Ask_user_tool", tool=AskUserTool())
-agent_registry.register_tool(name="Skill_tool", tool=SkillTool())
+agent_registry.register_tool(name="Skill_tool_BioInCoder", tool=SkillTool(agent_name="BioInCoder"))
+agent_registry.register_tool(name="Skill_tool_Planner", tool=SkillTool(agent_name="planner"))
+agent_registry.register_tool(name="Skill_tool_Search", tool=SkillTool(agent_name="search"))
+agent_registry.register_tool(name="Skill_tool_Browser", tool=SkillTool(agent_name="browser"))
+agent_registry.register_tool(name="Skill_tool_Read", tool=SkillTool(agent_name="reader"))
 agent_registry.register_tool(name="Write_plan", tool=WritePlan())
 agent_registry.register_tool(name="Update_checklist", tool=UpdateChecklist())
 agent_registry.register_tool(name="Advance_checklist", tool=AdvanceChecklist())
@@ -137,10 +141,10 @@ agent_registry.register_middleware(name="check_plan", middleware=check_plan)
 agent_registry.register_middleware(name="store_plan", middleware=StorePlanOutputMiddleware())
 
 #Plan_AgentConfig
-tools_for_plan = ["Ask_user_tool", "Skill_tool", "Bash_tool"]
+tools_for_plan = ["Ask_user_tool", "Skill_tool_Planner", "Bash_tool"]
 middleware_for_plan = ["check_plan", "store_plan"]
 
-SKILL_PROMPT_FOR_PLAN = generate_skill_tool_prompt() if "Skill_tool" in tools_for_plan else ""
+SKILL_PROMPT_FOR_PLAN = generate_skill_tool_prompt(agent_name="planner") if "Skill_tool_Planner" in tools_for_plan else ""
 
 Plan_AgentConfig = AgentConfig(
     agent_name = "planner",
@@ -155,13 +159,13 @@ Plan_AgentConfig = AgentConfig(
 
 #Search_AgentConfig
 tools_for_search = [
-    "Skill_tool",
+    "Skill_tool_Search",
     "Read_agent_messages",
     "List_saved_message_refs",
     "Academic_rest_request",
 ]
 
-SKILL_PROMPT_FOR_SEARCH = generate_skill_tool_prompt() if "Skill_tool" in tools_for_search else ""
+SKILL_PROMPT_FOR_SEARCH = generate_skill_tool_prompt(agent_name="search") if "Skill_tool_Search" in tools_for_search else ""
 
 Search_AgentConfig = AgentConfig(
     agent_name = "search",
@@ -175,7 +179,7 @@ Search_AgentConfig = AgentConfig(
 #Browser_AgentConfig
 tools_for_browser = [
     "Ask_user_tool",
-    "Skill_tool",
+    "Skill_tool_Browser",
     "Read_agent_messages",
     "List_saved_message_refs",
     "Agent_browser_help",
@@ -188,7 +192,7 @@ tools_for_browser = [
     "Browser_login_with_env",
 ]
 
-SKILL_PROMPT_FOR_BROWSER = generate_skill_tool_prompt() if "Skill_tool" in tools_for_browser else ""
+SKILL_PROMPT_FOR_BROWSER = generate_skill_tool_prompt(agent_name="browser") if "Skill_tool_Browser" in tools_for_browser else ""
 
 Browser_AgentConfig = AgentConfig(
     agent_name = "browser",
@@ -201,13 +205,13 @@ Browser_AgentConfig = AgentConfig(
 
 #Read_AgentConfig
 tools_for_read = [
-    "Skill_tool",
+    "Skill_tool_Read",
     "Read_agent_messages",
     "List_saved_message_refs",
     "Markitdown_command",
 ]
 
-SKILL_PROMPT_FOR_READ = generate_skill_tool_prompt() if "Skill_tool" in tools_for_read else ""
+SKILL_PROMPT_FOR_READ = generate_skill_tool_prompt(agent_name="reader") if "Skill_tool_Read" in tools_for_read else ""
 
 Read_AgentConfig = AgentConfig(
     agent_name="reader",
@@ -221,7 +225,7 @@ Read_AgentConfig = AgentConfig(
 #BioInCoder_AgentConfig
 tools_for_Coder = [
     "Ask_user_tool",
-    "Skill_tool",
+    "Skill_tool_BioInCoder",
     "Bash_tool",
     "Read_agent_messages",
     "List_saved_message_refs",
@@ -243,7 +247,7 @@ tools_for_Coder = [
     "jupytercode_session_control",
 ]
 
-SKILL_PROMPT_FOR_CODER = generate_skill_tool_prompt() if "Skill_tool" in tools_for_Coder else ""
+SKILL_PROMPT_FOR_CODER = generate_skill_tool_prompt(agent_name="BioInCoder") if "Skill_tool_BioInCoder" in tools_for_Coder else ""
 
 BioInCoder_AgentConfig = AgentConfig(
     agent_name = "BioInCoder",
