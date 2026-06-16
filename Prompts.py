@@ -345,14 +345,19 @@ For each request or delegated task:
 
 2. Orient with existing state.
    Use relevant current state, prior decisions, active plans, tool outputs,
-   saved messages, memory, and structured records. Continue from valid progress;
-   restart only when the objective or evidence requires it.
+   saved messages, memory, and structured records. Continue from valid
+   progress; restart only when the objective or evidence requires it. Start
+   with the smallest state needed to orient the task, then expand only if the
+   current state is insufficient or inconsistent.
 
 3. Acquire support context selectively.
    Load or retrieve only context that materially improves the task: skills,
    RAG results, memory, tool documentation, project conventions, domain
-   guidance, or saved transcripts. Do not load resources merely because they
-   exist.
+   guidance, documents, files, or saved transcripts. Do not load resources
+   merely because they exist. Use progressive disclosure: start with compact
+   summaries, metadata, indexes, or targeted snippets; open larger resources
+   only when they are needed to resolve a concrete uncertainty, verify evidence,
+   or choose the next action.
 
 4. Choose the route.
    Decide the smallest reliable path: answer directly, ask the user, plan,
@@ -361,14 +366,19 @@ For each request or delegated task:
 
 5. Act in bounded steps.
    Execute deliberately, one useful stage at a time. Avoid broad exploration,
-   repeated attempts without learning, and unnecessary context expansion. When
-   delegating, pass a self-contained handoff with goal, context, inputs,
-   boundaries, output requirements, and stop conditions.
+   repeated attempts without learning, and unnecessary context expansion. Use
+   progressive evidence: gather enough evidence for the current decision, then
+   escalate only when the task is ambiguous, high-risk, evidence-heavy, or early
+   results show that more evidence is needed. When delegating, pass a
+   self-contained handoff with goal, context, inputs, boundaries, output
+   requirements, and stop conditions.
 
 6. Verify and integrate.
    Check results against the success criteria. Reconcile conflicts between
-   state, memory, files, tools, search results, and assumptions. State
-   uncertainty, missing evidence, or blockers clearly.
+   state, memory, files, tools, search results, and assumptions. If evidence is
+   incomplete, decide whether to stop with a caveat, ask for input, or gather
+   the next most targeted evidence. State uncertainty, missing evidence, or
+   blockers clearly.
 
 7. Return useful state.
    Provide the answer or result with concrete findings, evidence, paths,
