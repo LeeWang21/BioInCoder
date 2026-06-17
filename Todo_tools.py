@@ -91,13 +91,14 @@ class WritePlanInput(BaseModel):
 class WritePlan(BaseTool):
     name: str = "write_plan"
     description: str = (
-        "Create or reset a plan composed of structured plan overview and plan checklist for the current user task. "
-        "Use this tool when the task is complex, multi-step, ambiguous, requires tools/files/code/data, "
-        "or when progress tracking would help, "
-        "or both previous plan overview and plan checklist require major revision. "
+        "Create the initial plan or reset the current plan for the current user task. "
+        "Use this tool when there is no plan yet and the task benefits from planning, "
+        "or when a major replan is needed because the goal, strategy, overview, scope, or checklist structure has changed substantially. "
         "The tool calls a planner subagent using the current conversation/runtime state and the provided task_brief. "
         "It returns a human- and agent-readable planning brief plus an ordered checklist with statuses. "
-        "Do not use this tool for simple one-step questions, direct factual answers, trivial rewrites, checklist minor revision or checklist status change. "
+        "Do not use this tool for simple one-step questions, direct factual answers, minor checklist edits, or routine progress advancement. "
+        "For small checklist item revisions, use update_checklist. "
+        "For only completing the current step and starting the next one, use advance_checklist. "
         "This tool only plans; it does not execute the task, modify files, run analysis, or produce the final deliverable."
     )
     args_schema: Type[BaseModel] = WritePlanInput
@@ -171,12 +172,13 @@ class UpdateChecklistInput(BaseModel):
     updated_checklist: list[PlanChecklistStep] = Field(
         ...,
         description=(
-            "The minor revised checklist that should replace the current plan checklist. "
-            "Pass the full checklist, not only the changed step. "
-            "Each item must preserve the original task meaning unless a minor revision is needed. "
-            "Use this making a small checklist refinement during execution. "
-            "Do not use this to advance progress status."
-            "Do not use this for create or reset the plan."
+            "The complete minor-revised checklist that should replace the current plan checklist. "
+            "Pass the full checklist, not only changed items. "
+            "Use this only when checklist items need a small content or structure revision, such as adding, removing, splitting, merging, rewording, or reordering items. "
+            "Statuses may be adjusted only as needed to keep the revised checklist coherent after those item changes. "
+            "Do not use this when the only intended change is routine progress advancement. "
+            "If the current in_progress step was completed and the next pending step should start, use advance_checklist instead. "
+            "Do not use this to create or reset the plan."
             "Use only these statuses: 'pending', 'in_progress', and 'completed'. "
             "Normally there should be exactly one 'in_progress' step while work remains. "
             "Do not mark a step as 'completed' unless it has actually been completed or verified. "
@@ -190,16 +192,17 @@ class UpdateChecklistInput(BaseModel):
 class UpdateChecklist(BaseTool):
     name: str = "update_checklist"
     description: str = (
-        "make a minor revision for the current plan checklist. "
-        "Use this tool for applying a minor checklist refinement during execution. "
-        "The input must be the complete minor revised checklist, not only the changed item. "
+        "Apply a minor revision to the current plan checklist. "
+        "Use this tool when checklist item content or structure needs a small change during execution: "
+        "add, remove, split, merge, reword, or reorder checklist items. "
+        "The input must be the complete revised checklist, not only the changed items. "
+        "Statuses may change only to keep the revised checklist coherent after item changes. "
         "This tool compares the original checklist with the proposed updated checklist and asks for user confirmation "
         "before writing the update to state. "
-        "Use this tool only for small checklist edits. "
-        "Do not use it to create the initial plan, rewrite the planning brief, change the overall strategy, "
+        "Do not use it to create the initial plan, reset the plan, rewrite the planning brief, change the overall strategy, "
         "or perform the task itself. "
-        "Do not use it to advance the checklist."
-        "Normally keep exactly one checklist item as 'in_progress' while work remains"
+        "Do not use it when the only change is marking the current step completed and moving to the next step; use advance_checklist for that. "
+        "Normally keep exactly one checklist item as 'in_progress' while work remains."
     )
     args_schema: type[BaseModel] = UpdateChecklistInput
 
@@ -307,9 +310,12 @@ class AdvanceChecklistInput(BaseModel):
 class AdvanceChecklist(BaseTool):
     name: str = "advance_checklist"
     description: str = (
-        "Advance the current plan checklist by marking one step completed and moving the next pending step "
-        "to 'in_progress'. Use this only after the single current 'in_progress' step has actually been completed. "
-        "This tool is for routine progress advancement only; use update_checklist for manual checklist minor edits."
+        "Advance routine checklist progress without changing checklist content or structure. "
+        "Use this only after the single current 'in_progress' step has actually been completed. "
+        "It marks that step as 'completed' and moves the next pending step to 'in_progress'. "
+        "Do not use this to add, remove, split, merge, reword, or reorder checklist items. "
+        "For minor checklist item revisions, use update_checklist. "
+        "For major replanning, use write_plan."
     )
     args_schema: type[BaseModel] = AdvanceChecklistInput
 

@@ -862,6 +862,21 @@ checklist as progress state. Keep checklist updates concrete and current.
 Ask the user only for blocking ambiguity that cannot be resolved from available
 context or safe read-only inspection.
 
+Choose plan tools by intent:
+
+- Need an initial plan, or a major reset because the goal, strategy, overview,
+  scope, or checklist structure changed substantially -> use `write_plan`.
+- Need a small checklist item revision during execution, such as adding,
+  removing, splitting, merging, rewording, or reordering checklist items -> use
+  `update_checklist`. Statuses may change only to keep the revised checklist
+  coherent after those item changes.
+- Need only routine progress advancement after completing the current
+  `in_progress` step -> use `advance_checklist`. This should not change item
+  wording, order, or scope.
+- Need to execute actual work, answer the user, inspect files, search, browse,
+  read documents, or run code -> do not call a plan tool unless the plan itself
+  must first be created, reset, revised, or advanced.
+
 # Skills
 
 Use `Skill` only when a listed skill matches the current workflow, file type,
