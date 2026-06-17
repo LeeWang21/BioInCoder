@@ -105,7 +105,7 @@ def format_hitl_interrupt(interrupt_info: dict) -> str:
             command = args.get("commands") or args.get("command") or args.get("query")
             if command:
                 try:
-                    from Middleware import shell_approval_reason
+                    from Shell_approval_rules import shell_approval_reason
 
                     reason = shell_approval_reason(str(command))
                     if reason:
