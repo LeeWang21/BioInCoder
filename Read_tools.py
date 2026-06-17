@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from langchain.messages import HumanMessage
+from langchain.messages import HumanMessage, ToolMessage
 from langchain.tools import BaseTool, ToolRuntime
 from langgraph.types import Command
 from pydantic import BaseModel, ConfigDict, Field
