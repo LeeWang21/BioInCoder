@@ -118,6 +118,38 @@ The tool does not return the password.
 It fills credentials using `agent-browser eval --stdin` so the password is not placed in CLI arguments.
 If selectors are unknown, browse the login page first, use a minimal snapshot/eval to identify selectors, then call `browser_login_with_env`.
 
+## Authentication Communication
+
+When login, institutional access, consent, CAPTCHA, two-factor authentication,
+or another user-facing access step is needed, BrowserAgent should actively
+coordinate with the user instead of silently failing or guessing.
+
+Use this order:
+
+1. Check whether an existing authenticated browser state can be loaded.
+2. Call `browser_auth_config` to inspect configured institution, username
+   availability, password availability, and auth state existence without
+   exposing secrets.
+3. If an institution choice is required and no reliable configured hint exists,
+   extract the visible institution search prompt or a small set of plausible
+   options, then ask the user which institution to choose.
+4. If credentials are needed, ask the user to provide them through environment
+   variables or complete a manual login step. Do not ask the user to paste
+   passwords into ordinary chat.
+5. If credentials are available as environment variables and login selectors
+   are known, use `browser_login_with_env`.
+6. If selectors are unknown, inspect the visible login page first, then use
+   `browser_login_with_env`.
+7. If CAPTCHA, two-factor authentication, consent, or a manual institutional
+   handoff appears, stop and ask the user for the specific action needed.
+8. After successful login, save browser state for reuse.
+9. Return non-secret login notes: institution selected, login provider,
+   auth state path, browser session name, and any manual step that was needed.
+
+Do not expose passwords, cookies, tokens, usernames, or private account details
+in final answers or tool outputs. Do not keep retrying blind login actions when
+the next step clearly requires user input.
+
 ## Full Text / Download Access
 
 When the task requires article full text, PDF, supplementary files, or other protected downloads:
@@ -151,14 +183,14 @@ When the task requires article full text, PDF, supplementary files, or other pro
 8. Retry the exact target URL after loading state.
 9. If no usable state exists and credentials are configured in environment variables, identify login form selectors and call `browser_login_with_env`.
 10. Do not declare CAPTCHA or interactive login as a blocker only because an input exists in the DOM. Verify that the field is visible with snapshot/screenshot or computed style checks.
-11. If a visible CAPTCHA, two-factor prompt, consent screen, institutional choice, manual login step, or credential problem blocks progress, stop browsing and ask the user promptly. Do not keep retrying blind browser actions.
+11. If a visible CAPTCHA, two-factor prompt, consent screen, institutional choice, manual login step, or credential problem blocks progress, stop browsing and ask the user promptly. Include the exact page, visible prompt, and needed user action. Do not keep retrying blind browser actions.
 12. Save authenticated state for reuse:
 
 ```json
 {"action": "save", "session_name": "library_login", "state_path": "library.json"}
 ```
 
-13. Return only the extracted findings, file path, or access limitation. Do not expose cookies, tokens, usernames, or passwords.
+13. Return only the extracted findings, file path, non-secret login notes, or access limitation. Do not expose cookies, tokens, usernames, or passwords.
 
 Do not bypass paywalls or access controls except through legitimate user-provided credentials/session state.
 Do not use authenticated access for bulk downloading unless the user explicitly asks and the access terms permit it.
