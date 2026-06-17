@@ -303,12 +303,56 @@ BrowserAgent may directly extract page evidence from:
 
 If page-level evidence is sufficient, do not call ReadAgent.
 
+### Browser Access and Reliability
+
+BrowserAgent should make a serious but bounded attempt before marking a paper as
+blocked by firewall, anti-bot, or unstable page behavior:
+
+- open the page with an explicit browser session;
+- wait for load/network idle and inspect the page state;
+- retry after reload, longer wait, or alternate public URL when reasonable;
+- try PubMed/PMC, Europe PMC, DOI landing page, publisher page, and open-access
+  links before declaring the record unreachable;
+- distinguish a temporary load failure from a visible anti-bot, CAPTCHA,
+  firewall, paywall, or login wall.
+
+If the page still cannot be used, BrowserAgent must mark the candidate with a
+specific blocker such as `blocked_antibot`, `blocked_firewall`,
+`blocked_login_required`, `blocked_paywall`, or `blocked_unstable_page`. The
+stage report should tell the user which URL failed, what was tried, and what
+user action or alternate route might help.
+
+### Authentication and User Coordination
+
+When legitimate login or institutional access is needed to complete the task,
+BrowserAgent should actively coordinate with the user through `ask_user` instead
+of silently giving up:
+
+- check existing browser auth state first;
+- inspect configured institution/username/password availability without
+  exposing secrets;
+- ask the user for institution choice, manual login action, or credential
+  availability when needed;
+- use institution, username, and password environment variables only through
+  the approved browser login tool;
+- never print passwords, cookies, or tokens;
+- save successful authenticated browser state for reuse;
+- record the non-secret login route that worked, such as institution selected,
+  login provider, auth state path, session name, and any manual step required.
+
+BioInCoder should preserve successful login notes in the candidate/evidence
+tracking context so later BrowserAgent calls can reuse the same access route
+instead of rediscovering it.
+
 BrowserAgent should return:
 
 ```text
 candidate_id
 visited_url
 access_status
+access_attempts
+auth_state_used_or_saved
+login_notes
 page_evidence_found: yes/no
 page_evidence_summary
 evidence_snippet_or_location
@@ -331,7 +375,15 @@ BrowserAgent downloads artifacts only when needed:
 - ZIP archives;
 - dataset files or metadata files.
 
-BrowserAgent must report `file_path` and `metadata_path` for each downloaded artifact.
+When a file must be downloaded, BrowserAgent should first locate the direct file
+URL and use `browser_download_artifact`. Do not rely on ad hoc shell download
+commands or manual browser cache paths for normal paper PDFs, supplementary
+files, tables, archives, or dataset metadata.
+
+BrowserAgent must report `file_path` and `metadata_path` for each downloaded
+artifact. If `browser_download_artifact` reports HTML, access denied, login
+content, or another suspicious result, treat the download as incomplete and
+continue the browser/auth flow or mark the blocker.
 
 ### 4. Local Artifact Reading
 
@@ -399,6 +451,9 @@ excluded
 duplicate
 blocked_paywall
 blocked_antibot
+blocked_firewall
+blocked_login_required
+blocked_unstable_page
 needs_user_input
 deferred_low_priority
 ```
@@ -470,6 +525,8 @@ If a paper is blocked:
 
 - record the exact blocker;
 - preserve URL, DOI/PMID, and attempted path;
+- record access attempts, waits/retries, alternate URLs, and login/auth state
+  attempts when relevant;
 - mark the candidate status;
 - continue to the next candidate when possible.
 
@@ -540,21 +597,24 @@ PMID/PMCID/DOI:
 Target evidence fields:
 Evidence focus:
 Likely evidence locations to check first:
+Known access/login notes:
 Known prior findings:
 
 # Inputs
 URL(s):
+Preferred auth state or institution hint:
 
 # Scope Boundary
-Do not start a broad literature search. Do not deeply read downloaded PDF/Excel/Word/PPT files. Download artifacts and return paths if file inspection is needed.
+Do not start a broad literature search. Do not deeply read downloaded PDF/Excel/Word/PPT files. Use the browser download tool for PDFs, supplements, tables, archives, or dataset metadata when file inspection is needed. Download artifacts and return paths if file inspection is needed.
 
 # Required Output
-Return access_status, locations_checked, page_evidence_found, evidence
-snippet/location if found, downloaded_artifacts with file_path/metadata_path,
-read_agent_needed yes/no, blockers, and recommended next step.
+Return access_status, access_attempts, auth_state_used_or_saved, login_notes,
+locations_checked, page_evidence_found, evidence snippet/location if found,
+downloaded_artifacts with file_path/metadata_path, read_agent_needed yes/no,
+blockers, and recommended next step.
 
 # Stop Condition
-Stop after checking the specified page and directly linked full text/supplement/resource artifacts, or after a clear access/blocking condition.
+Stop after checking the specified page and directly linked full text/supplement/resource artifacts, after a successful download, after a bounded anti-bot/firewall retry sequence, or when user input is needed for login, CAPTCHA, institution choice, two-factor authentication, credentials, or access permission.
 
 # Handoff
 BioInCoder will integrate page evidence or pass downloaded artifacts to ReadAgent.
