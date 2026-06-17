@@ -1,6 +1,8 @@
 import argparse
+import json
 import os
 from pathlib import Path
+from typing import Any
 
 from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
@@ -80,6 +82,64 @@ def read_repl_input(session, prompt: str) -> str | None:
         return user_input
 
 
+def is_hitl_interrupt(interrupt_info: Any) -> bool:
+    return (
+        isinstance(interrupt_info, dict)
+        and isinstance(interrupt_info.get("action_requests"), list)
+        and isinstance(interrupt_info.get("review_configs"), list)
+    )
+
+
+def format_hitl_interrupt(interrupt_info: dict) -> str:
+    lines = ["\nShell/tool action requires approval."]
+    action_requests = interrupt_info.get("action_requests", [])
+    review_configs = interrupt_info.get("review_configs", [])
+
+    for index, request in enumerate(action_requests, start=1):
+        lines.append(f"\n[{index}] {request.get('name', 'tool')}")
+        description = request.get("description")
+        if description:
+            lines.append(str(description))
+        args = request.get("args", {})
+        if args:
+            lines.append("Args:")
+            lines.append(json.dumps(args, ensure_ascii=False, indent=2, default=str))
+
+    if review_configs:
+        allowed = review_configs[0].get("allowed_decisions", [])
+        if allowed:
+            lines.append(f"\nAllowed decisions: {', '.join(allowed)}")
+
+    lines.append('Reply "approve" to run, or "reject <reason>" to cancel.')
+    return "\n".join(lines)
+
+
+def make_hitl_resume(interrupt_info: dict, user_answer: str) -> Command:
+    answer = user_answer.strip()
+    answer_lower = answer.lower()
+    action_count = len(interrupt_info.get("action_requests", [])) or 1
+
+    if answer_lower in {"approve", "approved", "yes", "y", "ok", "run", "continue"}:
+        decisions = [{"type": "approve"} for _ in range(action_count)]
+        return Command(resume={"decisions": decisions})
+
+    if answer_lower.startswith("reject"):
+        message = answer[6:].strip() or "Rejected by user."
+    elif answer_lower in {"no", "n", "cancel", "deny", "denied"}:
+        message = "Rejected by user."
+    else:
+        message = answer or "Rejected by user."
+
+    decisions = [{"type": "reject", "message": message} for _ in range(action_count)]
+    return Command(resume={"decisions": decisions})
+
+
+def make_resume_command(interrupt_info: Any, user_answer: str) -> Command:
+    if is_hitl_interrupt(interrupt_info):
+        return make_hitl_resume(interrupt_info, user_answer)
+    return Command(resume=user_answer)
+
+
 def main() -> None:
     args = parse_args()
     os.environ["BIOINCODER_USER_ID"] = args.user_id
@@ -124,15 +184,21 @@ def main() -> None:
                 ):
                     if "__interrupt__" in chunk["data"]:
                         interrupt_info = chunk["data"]["__interrupt__"][0].value
-                        print(interrupt_info)
-                        user_answer = read_repl_input(repl_session, "BioInCoder needs input> ")
+                        if is_hitl_interrupt(interrupt_info):
+                            print(format_hitl_interrupt(interrupt_info))
+                            prompt = "BioInCoder approval> "
+                        else:
+                            print(interrupt_info)
+                            prompt = "BioInCoder needs input> "
+
+                        user_answer = read_repl_input(repl_session, prompt)
                         if user_answer is None:
                             print("\nExiting.")
                             return
                         if user_answer.lower() in {"/exit", "/quit"}:
                             print("Exiting.")
                             return
-                        graph_input = Command(resume=user_answer)
+                        graph_input = make_resume_command(interrupt_info, user_answer)
                         interrupted = True
                         break
 
