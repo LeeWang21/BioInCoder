@@ -100,11 +100,14 @@ Use for life-science literature across PubMed, PMC, preprints, DOI, and open-acc
   "params": {
     "query": "single-cell RNA-seq pancreatic cancer",
     "format": "json",
-    "sort": "RELEVANCE"
+    "pageSize": 25
   },
   "record_path": "resultList.result"
 }
 ```
+
+Europe PMC defaults to relevance ranking when `sort` is omitted. Do not use
+`sort: "RELEVANCE"`; it does not return a normal `resultList` response.
 
 Date-limited example:
 
@@ -119,6 +122,11 @@ Date-limited example:
   "record_path": "resultList.result"
 }
 ```
+
+Useful explicit sort values:
+
+- `P_PDATE_D desc` for newest publication date first.
+- `CITED desc` for citation count first.
 
 ## bioRxiv / medRxiv
 
