@@ -1,8 +1,14 @@
 ---
 name: bio-atac-seq-motif-deviation
 description: Analyze TF motif accessibility variability across samples or single cells using chromVAR. Use when identifying TF motifs whose accessibility correlates with conditions, computing per-sample motif z-scores after matched background correction, comparing to ArchR / Signac equivalents, or distinguishing motif-accessibility signal from per-site footprinting.
-tool_type: r
-primary_tool: chromVAR
+metadata:
+  domain: atac-seq
+  tool_type: r
+  primary_tools:
+    - chromVAR
+    - ArchR
+    - Signac
+  intended_agent: [BioInCoder, planner]
 ---
 
 ## Version Compatibility

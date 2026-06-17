@@ -1,8 +1,14 @@
 ---
 name: bio-single-cell-doublet-detection
 description: Detect and remove doublets (multiple cells captured in one droplet) from single-cell RNA-seq data. Uses Scrublet (Python), DoubletFinder (R), and scDblFinder (R). Essential QC step before clustering to avoid artificial cell populations. Use when identifying and removing doublets from scRNA-seq data.
-tool_type: mixed
-primary_tool: Scrublet
+metadata:
+  domain: single-cell
+  tool_type: mixed
+  primary_tools:
+    - Scrublet
+    - DoubletFinder
+    - scDblFinder
+  intended_agent: [BioInCoder, planner]
 ---
 
 ## Version Compatibility

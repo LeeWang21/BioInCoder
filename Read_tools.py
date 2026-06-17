@@ -488,7 +488,7 @@ class ReadArtifact(BaseTool):
             if is_graph_interrupt(exc):
                 raise
             return tool_error_command(
-                runtime,
                 exc,
+                runtime.tool_call_id,
                 hint="ReadAgent failed. Retry read_artifact with a clearer, narrower task_brief or inspect saved messages.",
             )

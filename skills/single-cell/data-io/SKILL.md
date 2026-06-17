@@ -1,8 +1,13 @@
 ---
 name: bio-single-cell-data-io
 description: Read, write, and create single-cell data objects using Seurat (R) and Scanpy (Python). Use for loading 10X Genomics data, importing/exporting h5ad and RDS files, creating Seurat objects and AnnData objects, and converting between formats. Use when loading, saving, or converting single-cell data formats.
-tool_type: mixed
-primary_tool: Seurat
+metadata:
+  domain: single-cell
+  tool_type: mixed
+  primary_tools:
+    - Seurat
+    - Scanpy
+  intended_agent: [BioInCoder, planner]
 ---
 
 ## Version Compatibility

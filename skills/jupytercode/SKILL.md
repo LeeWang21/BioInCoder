@@ -3,6 +3,8 @@ name: bioincoder-jupytercode
 description: Use BioInCoder's Jupytercode tools for notebook-backed interactive coding, iterative data analysis, kernel/session management, and reproducible analysis notebooks. Use when writing, editing, running, debugging, or organizing analysis code in a Jupyter notebook through tools such as jupytercode_use_notebook, jupytercode_read_notebook, jupytercode_insert_execute_code_cell, and jupytercode_session_control.
 metadata:
   tool_type: coding
+  primary_tools:
+    - jupytercode
   intended_agent: [BioInCoder, planner]
 ---
 

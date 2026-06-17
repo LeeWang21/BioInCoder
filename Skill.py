@@ -106,11 +106,13 @@ class Skill:
         """
         Minimal fallback parser for the simple SKILL.md frontmatter used here.
 
-        Supports top-level scalar keys and one-level nested mapping blocks such
-        as metadata. PyYAML is still preferred when installed.
+        Supports top-level scalar keys, one-level nested mapping blocks such
+        as metadata, and simple one-level block lists. PyYAML is still
+        preferred when installed.
         """
         parsed: Dict[str, Any] = {}
         current_map: Optional[str] = None
+        current_list: Optional[tuple[str, str] | str] = None
 
         for raw_line in yaml_content.splitlines():
             if not raw_line.strip() or raw_line.lstrip().startswith("#"):
@@ -119,7 +121,20 @@ class Skill:
             indent = len(raw_line) - len(raw_line.lstrip(" "))
             line = raw_line.strip()
 
+            if line.startswith("- "):
+                item = Skill._parse_simple_yaml_value(line[2:].strip())
+                if isinstance(current_list, tuple):
+                    map_key, list_key = current_list
+                    parsed.setdefault(map_key, {}).setdefault(list_key, []).append(item)
+                elif isinstance(current_list, str):
+                    if not isinstance(parsed.get(current_list), list):
+                        parsed[current_list] = []
+                    parsed[current_list].append(item)
+                continue
+
             if indent == 0:
+                current_map = None
+                current_list = None
                 if ":" not in line:
                     continue
                 key, value = line.split(":", 1)
@@ -128,14 +143,21 @@ class Skill:
                 if value == "":
                     parsed[key] = {}
                     current_map = key
+                    current_list = key
                 else:
                     parsed[key] = Skill._parse_simple_yaml_value(value)
-                    current_map = None
                 continue
 
             if current_map and indent >= 2 and ":" in line:
                 key, value = line.split(":", 1)
-                parsed.setdefault(current_map, {})[key.strip()] = Skill._parse_simple_yaml_value(value.strip())
+                key = key.strip()
+                value = value.strip()
+                if value == "":
+                    parsed.setdefault(current_map, {})[key] = []
+                    current_list = (current_map, key)
+                else:
+                    parsed.setdefault(current_map, {})[key] = Skill._parse_simple_yaml_value(value)
+                    current_list = None
 
         return parsed
 

@@ -1,8 +1,13 @@
 ---
 name: bio-single-cell-lineage-tracing
 description: Reconstruct cell lineage trees from CRISPR barcode tracing or mitochondrial mutations. Use when studying clonal dynamics, cell fate decisions, or developmental trajectories.
-tool_type: python
-primary_tool: Cassiopeia
+metadata:
+  domain: single-cell
+  tool_type: python
+  primary_tools:
+    - Cassiopeia
+    - CoSpar
+  intended_agent: [BioInCoder, planner]
 ---
 
 ## Version Compatibility

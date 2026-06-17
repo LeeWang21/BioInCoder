@@ -1,8 +1,15 @@
 ---
 name: bio-single-cell-batch-integration
 description: Integrate multiple scRNA-seq samples/batches using Harmony, scVI, Seurat anchors, and fastMNN. Remove technical variation while preserving biological differences. Use when integrating multiple scRNA-seq batches or datasets.
-tool_type: mixed
-primary_tool: Harmony
+metadata:
+  domain: single-cell
+  tool_type: mixed
+  primary_tools:
+    - Harmony
+    - scVI
+    - Seurat
+    - fastMNN
+  intended_agent: [BioInCoder, planner]
 ---
 
 ## Version Compatibility

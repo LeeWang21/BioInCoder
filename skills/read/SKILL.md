@@ -3,8 +3,9 @@ name: bioincoder-read
 description: Use BioInCoder ReadAgent with MarkItDown for quick local document reading of PDFs, Word, Excel, PowerPoint, HTML, CSV/TSV, JSON/XML, and downloaded supplementary files. Use when converting documents to Markdown, searching converted text, or extracting targeted snippets with low context.
 metadata:
   tool_type: read
-  primary_tool: markitdown_command
-  intended_agent: reader
+  primary_tools:
+    - markitdown_command
+  intended_agent: [reader]
 ---
 
 # BioInCoder Read

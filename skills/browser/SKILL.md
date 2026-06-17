@@ -3,8 +3,9 @@ name: bioincoder-browser
 description: Use BioInCoder BrowserAgent with agent-browser CLI and CloakBrowser as the default browser backend for low-context web browsing, page inspection, interaction, screenshots, and targeted extraction. Use when opening websites, verifying web pages, extracting page-level evidence, or handling slow/anti-bot pages with CloakBrowser.
 metadata:
   tool_type: browser
-  primary_tool: agent_browser_command
-  intended_agent: browser
+  primary_tools:
+    - agent_browser_command
+  intended_agent: [browser]
 ---
 
 # BioInCoder Browser

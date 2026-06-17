@@ -3,8 +3,9 @@ name: bioincoder-academic-search
 description: Construct flexible JSON requests for BioInCoder academic_search using academic_rest_request across PubMed/NCBI Entrez, Europe PMC, bioRxiv/medRxiv, arXiv, OpenAlex, and Semantic Scholar. Use when searching papers, preprints, scholarly metadata, citations, or biomedical database records.
 metadata:
   tool_type: search
-  primary_tool: academic_rest_request
-  intended_agent: search
+  primary_tools:
+    - academic_rest_request
+  intended_agent: [search]
 ---
 
 # BioInCoder Academic Search

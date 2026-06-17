@@ -1,8 +1,14 @@
 ---
 name: bio-single-cell-multimodal-integration
 description: Analyze multi-modal single-cell data (CITE-seq, Multiome, spatial). Use when working with data that measures multiple modalities per cell like RNA + protein or RNA + ATAC. Use when analyzing CITE-seq, Multiome, or other multi-modal single-cell data.
-tool_type: mixed
-primary_tool: Seurat
+metadata:
+  domain: single-cell
+  tool_type: mixed
+  primary_tools:
+    - Seurat
+    - Scanpy
+    - MuData
+  intended_agent: [BioInCoder, planner]
 ---
 
 ## Version Compatibility

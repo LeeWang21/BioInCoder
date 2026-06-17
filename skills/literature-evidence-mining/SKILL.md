@@ -3,6 +3,10 @@ name: literature-evidence-mining
 description: Coordinate Agent for large-scale literature screening, paper-by-paper evidence extraction, supplementary file/resource retrieval, and structured evidence table construction. Use when users need to find many papers, screen literature, or extract specific information/resources from papers, full text, methods, PDFs, supplementary tables, datasets, protocols, catalog numbers, accession IDs, software versions, or other paper-linked evidence.
 metadata:
   tool_type: orchestration
+  primary_tools:
+    - academic_search
+    - browser_browse
+    - read_artifact
   intended_agent: [BioInCoder, planner]
 ---
 
