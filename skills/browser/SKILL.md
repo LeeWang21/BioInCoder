@@ -239,7 +239,8 @@ Open, wait, inspect, act, wait again:
 {"args": ["--session", "task_page", "snapshot", "-i"]}
 ```
 
-After any click, form submit, navigation, scroll, or dynamic action, wait again before reading state.
+After any click, form submit, navigation, scroll, or dynamic action, wait again
+before reading state. Prefer patient waits over immediate extraction.
 When the task is done, close the session/browser:
 
 ```json
@@ -378,18 +379,26 @@ Always wait after:
 - submitting forms;
 - `press Enter` in search boxes;
 - scroll on infinite-loading pages;
-- any anti-bot or verification screen.
+- any anti-bot or verification screen;
+- firewall, access-check, or rate-limit pages;
+- login redirects, institutional handoffs, OpenAthens/Shibboleth redirects,
+  consent pages, and pages that look temporarily failed.
 
 Preferred waits:
 
 ```json
 {"args": ["wait", "--load", "networkidle"], "timeout_seconds": 180}
-{"args": ["wait", "@e1"], "timeout_seconds": 120}
-{"args": ["wait", "--url", "**/target*"], "timeout_seconds": 120}
-{"args": ["wait", "5000"]}
+{"args": ["wait", "@e1"], "timeout_seconds": 180}
+{"args": ["wait", "--url", "**/target*"], "timeout_seconds": 180}
+{"args": ["wait", "60000"], "timeout_seconds": 120}
+{"args": ["wait", "120000"], "timeout_seconds": 180}
+{"args": ["wait", "10000"], "timeout_seconds": 30}
 ```
 
-Use fixed waits only when load-state or element waits are insufficient.
+Use fixed waits only when load-state, URL, or element waits are insufficient.
+For anti-bot checks, firewall pages, slow login redirects, and institutional
+handoffs, waiting 60-120 seconds before declaring failure is acceptable when the
+page is important to the task.
 
 ## Session Cleanup
 
@@ -529,7 +538,10 @@ After navigation, dynamic content load, or DOM-changing clicks:
 
 If a page is blocked, slow, or requires verification:
 
-- wait longer;
+- wait longer, including a 60-120 second wait for important anti-bot,
+  firewall, login redirect, or institutional access flows;
+- reload once after a long wait if the page state is unchanged and retrying is
+  reasonable;
 - take an annotated screenshot if visual diagnosis is needed;
 - check current URL/title;
 - use `cloakbrowser_config` with `status`/`configure` if CloakBrowser env is not already active;
@@ -556,7 +568,8 @@ For the same URL, page, interface, or repeated failure mode, allow several reaso
 
 Reasonable recovery strategies include:
 
-- wait longer;
+- wait longer, including 60-120 seconds for important anti-bot, firewall,
+  login redirect, or institutional handoff states;
 - use a fresh session;
 - close and reopen the session;
 - switch from full page browse to targeted `eval`;

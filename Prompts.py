@@ -665,9 +665,16 @@ Do not use raw shell commands for browser actions when agent_browser_command can
 After every page transition or page-changing action, wait before reading the page.
 
 Examples:
-- after `open`, run `wait --load networkidle` or a targeted `wait`;
-- after `click` that may navigate, run `wait --load networkidle` or `wait --url ...`;
-- after `fill`, `press`, or form submission, wait for the expected UI or network state;
+- after `open`, run `wait --load networkidle` or a targeted `wait` with a
+  generous timeout, usually 120-180 seconds;
+- after `click` that may navigate, run `wait --load networkidle`, `wait --url
+  ...`, or an element wait with a generous timeout;
+- after `fill`, `press`, or form submission, wait for the expected UI, URL, or
+  network state before reading the page;
+- after anti-bot checks, firewall screens, login redirects, institutional
+  handoffs, consent pages, or pages that look temporarily failed, wait longer
+  before deciding the page is blocked; 60-120 seconds is reasonable for
+  important access flows;
 - for slow pages, use a fixed wait only as a fallback.
 
 # Session and cleanup discipline

@@ -309,7 +309,11 @@ BrowserAgent should make a serious but bounded attempt before marking a paper as
 blocked by firewall, anti-bot, or unstable page behavior:
 
 - open the page with an explicit browser session;
-- wait for load/network idle and inspect the page state;
+- wait for load/network idle with a generous timeout, usually 120-180 seconds,
+  then inspect the page state;
+- for anti-bot checks, firewall pages, login redirects, institutional handoffs,
+  or pages that look temporarily failed, wait longer before judging failure;
+  60-120 seconds of fixed waiting is acceptable for important papers;
 - retry after reload, longer wait, or alternate public URL when reasonable;
 - try PubMed/PMC, Europe PMC, DOI landing page, publisher page, and open-access
   links before declaring the record unreachable;
