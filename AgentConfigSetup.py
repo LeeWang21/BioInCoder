@@ -13,6 +13,7 @@ from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, 
 from Runtime import MultiAgentRuntime, BioInCoderState
 from jupytercode_tool import JupyterCodeToolkit, JUPYTER_REGISTRY
 from Search_tools import AcademicRestRequest, AcademicSearch
+from Persistence import make_checkpointer, session_messages_dir
 from Browser_tools import (
     AgentBrowserCommand,
     AgentBrowserHelp,
@@ -27,7 +28,6 @@ from Browser_tools import (
 from Read_tools import MarkItDownCommand, ReadArtifact
 
 from langchain_community.tools import ShellTool
-from langgraph.checkpoint.memory import InMemorySaver
 from langchain.agents.structured_output import ToolStrategy
 
 
@@ -104,7 +104,7 @@ class PlanOutputFormat(BaseModel):
 # Agent_registry Setup
 # =========================
 agent_registry = AgentRegistry()
-ckpt = InMemorySaver()
+ckpt = make_checkpointer()
 
 #register_tool
 agent_registry.register_tool(name="Bash_tool", tool=ShellTool(name = "Bash"))
@@ -282,4 +282,5 @@ multi_agent_runtime = MultiAgentRuntime(
     jupyter_registry=JUPYTER_REGISTRY,
     user_id=BIOINCODER_USER_ID,
     session_id=BIOINCODER_SESSION_ID,
+    message_storage_dir=session_messages_dir(BIOINCODER_USER_ID, BIOINCODER_SESSION_ID),
 )

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, TypedDict, Annotated
 from uuid import uuid4
 
@@ -67,6 +68,7 @@ class MultiAgentRuntime:
         jupyter_registry: JupyterRegistry | None = None,
         user_id: str | None = None,
         session_id: str | None = None,
+        message_storage_dir: str | Path | None = None,
         context_usage: float = 0
     ):
         self.agent_registry = agent_registry
@@ -76,6 +78,7 @@ class MultiAgentRuntime:
             MessageContainerConfig(
                 user_id=user_id,
                 session_id=session_id,
+                storage_dir=message_storage_dir,
             )
         )
         self.jupyter_registry = jupyter_registry or JupyterRegistry()

@@ -7,6 +7,8 @@ from typing import Any
 from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 
+from Persistence import graph_thread_id
+
 try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
@@ -21,7 +23,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the BioInCoder CLI.")
     parser.add_argument("--user-id", default=os.environ.get("BIOINCODER_USER_ID", "default_user"))
     parser.add_argument("--session-id", default=os.environ.get("BIOINCODER_SESSION_ID", "default_session"))
-    parser.add_argument("--thread-id", default=os.environ.get("BIOINCODER_THREAD_ID", "001"))
+    parser.add_argument(
+        "--thread-id",
+        default=os.environ.get("BIOINCODER_THREAD_ID"),
+        help="Advanced: optional sub-thread id. By default, session-id is the restart key.",
+    )
     return parser.parse_args()
 
 
@@ -165,12 +171,14 @@ def main() -> None:
     from AgentConfigSetup import multi_agent_runtime
 
     bioincoder = multi_agent_runtime.agent_registry.build_agent(agent_name="BioInCoder")
-    config = {"configurable": {"thread_id": args.thread_id}}
+    internal_thread_id = graph_thread_id(args.user_id, args.session_id, args.thread_id)
+    config = {"configurable": {"thread_id": internal_thread_id}}
     repl_session = make_prompt_session()
 
     print(
         "BioInCoder started "
-        f"(user_id={args.user_id}, session_id={args.session_id}, thread_id={args.thread_id})."
+        f"(user_id={args.user_id}, session_id={args.session_id}, "
+        f"checkpoint_thread_id={internal_thread_id})."
     )
     if repl_session is None:
         print("prompt_toolkit is not available; falling back to basic input().")

@@ -60,10 +60,24 @@ export BIOINCODER_PYTHON=/path/to/python3.10+
 Useful options:
 
 ```bash
-./run_bioincoder.sh --user-id user1 --session-id session1 --thread-id 001
+./run_bioincoder.sh --user-id user1 --session-id literature-task-001
 ```
 
+`session-id` is the restart key. Start BioInCoder again with the same
+`user-id` and `session-id` to continue the same session when SQLite
+checkpointing is installed.
+
+Advanced users can pass `--thread-id` to create a sub-thread under the same
+session, but normal use should not need it.
+
 Use `/exit` or Ctrl-D to quit.
+
+Runtime state is stored under `artifacts/` by default:
+
+- `artifacts/checkpoints/bioincoder.sqlite` for LangGraph checkpoints
+- `artifacts/sessions/<user-id>/<session-id>/messages/` for saved subagent transcripts
+
+Set `BIOINCODER_CHECKPOINTER=memory` to disable persistent checkpoints.
 
 ## Skills
 
@@ -89,6 +103,7 @@ Current skill areas include:
 
 ## Notes
 
-This project is currently an interactive CLI-first prototype. Runtime state,
-message transcripts, and notebook sessions are mostly process-local unless a
-tool explicitly writes artifacts to disk.
+This project is currently an interactive CLI-first prototype. Main-agent
+checkpoints and saved subagent transcripts can persist across restarts when the
+SQLite checkpoint dependency is installed. Jupyter kernels and some live
+browser state are still process-local unless explicitly saved by a tool.

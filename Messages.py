@@ -14,6 +14,9 @@ class MessageContainerConfig:
     allow_create_channel: bool = True
     user_id: str | None = None
     session_id: str | None = None
+    storage_dir: str | Path | None = None
+    autosave: bool = True
+    autoload: bool = True
 
 
 
@@ -26,6 +29,8 @@ class MessageContainer:
     def __post_init__(self) -> None:
         for channel in self.config.default_channels:
             self.add_channel(channel)
+        if self.config.autoload and self.config.storage_dir is not None:
+            self.load_all_requestMsgs(self.config.storage_dir, strict_metadata=True)
 
 
     def add_channel(self, channel_name: str) -> None:
@@ -41,6 +46,7 @@ class MessageContainer:
                 raise ValueError(f"Channel '{channel_name}' does not exist and channel creation is disabled.")
               
         self.channels[channel_name][request_id] = messages
+        self._autosave_requestMsgs(channel_name, request_id)
 
 
     def add_requestMsg(self, channel_name: str, request_id: str, message: AnyMessage) -> None:
@@ -106,6 +112,25 @@ class MessageContainer:
             return get_buffer_string(messages, format="xml")
 
         raise ValueError(f"Unsupported format: {format}")
+
+    def _safe_file_component(self, value: str) -> str:
+        safe = "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-")
+        return safe or "unnamed"
+
+    def requestMsgs_file_path(self, channel_name: str, request_id: str, root_dir: str | Path | None = None) -> Path:
+        root = Path(root_dir or self.config.storage_dir or "artifacts/messages")
+        filename = f"{self._safe_file_component(channel_name)}__{self._safe_file_component(request_id)}.json"
+        return root / filename
+
+    def _autosave_requestMsgs(self, channel_name: str, request_id: str) -> None:
+        if not self.config.autosave or self.config.storage_dir is None:
+            return
+        self.save_requestMsgs(
+            channel_name=channel_name,
+            request_id=request_id,
+            file_path=self.requestMsgs_file_path(channel_name, request_id),
+            overwrite=True,
+        )
     
 
     def save_requestMsgs(
@@ -140,6 +165,26 @@ class MessageContainer:
         )
 
         return path
+
+    def load_all_requestMsgs(
+        self,
+        root_dir: str | Path,
+        overwrite: bool = True,
+        strict_metadata: bool = False,
+    ) -> list[Path]:
+        root = Path(root_dir)
+        if not root.exists():
+            return []
+
+        loaded_paths: list[Path] = []
+        for path in sorted(root.glob("*.json")):
+            self.load_requestMsgs(
+                path,
+                overwrite=overwrite,
+                strict_metadata=strict_metadata,
+            )
+            loaded_paths.append(path)
+        return loaded_paths
 
     def load_requestMsgs(
         self,
