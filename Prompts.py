@@ -873,9 +873,7 @@ Choose plan tools by intent:
 - Need only routine progress advancement after completing the current
   `in_progress` step -> use `advance_checklist`. This should not change item
   wording, order, or scope.
-- Need to execute actual work, answer the user, inspect files, search, browse,
-  read documents, or run code -> do not call a plan tool unless the plan itself
-  must first be created, reset, revised, or advanced.
+
 
 # Skills
 

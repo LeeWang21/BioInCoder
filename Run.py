@@ -127,7 +127,7 @@ def format_hitl_interrupt(interrupt_info: dict) -> str:
         if allowed:
             lines.append(f"\nAllowed decisions: {', '.join(allowed)}")
 
-    lines.append('Reply "approve" to run, or "reject <reason>" to cancel.')
+    lines.append('Reply "approve" to run, or "reject <reason>" to cancel with feedback.')
     return "\n".join(lines)
 
 
