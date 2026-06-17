@@ -199,20 +199,6 @@ def shell_needs_approval(request: ToolCallRequest) -> bool:
     return shell_approval_reason(_extract_shell_command(request)) is not None
 
 
-def shell_approval_description(request: ToolCallRequest) -> str:
-    command = _normalize_shell_command(_extract_shell_command(request))
-    reason = shell_approval_reason(command)
-    if reason is None:
-        return f"Shell command requires approval.\n\nCommand:\n{command}"
-
-    name, description = reason
-    return (
-        "Shell command requires approval.\n\n"
-        f"Reason: {name} - {description}\n\n"
-        f"Command:\n{command}"
-    )
-
-
 shell_approval = HumanInTheLoopMiddleware(
     interrupt_on={
         "Bash": {

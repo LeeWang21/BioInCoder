@@ -101,6 +101,23 @@ def format_hitl_interrupt(interrupt_info: dict) -> str:
         if description:
             lines.append(str(description))
         args = request.get("args", {})
+        if request.get("name") == "Bash" and isinstance(args, dict):
+            command = args.get("commands") or args.get("command") or args.get("query")
+            if command:
+                try:
+                    from Middleware import shell_approval_reason
+
+                    reason = shell_approval_reason(str(command))
+                    if reason:
+                        reason_name, reason_description = reason
+                        lines.append(f"Risk reason: {reason_name} - {reason_description}")
+                    else:
+                        lines.append(
+                            "Risk reason: no local shell approval rule matched. "
+                            "If this approval was unexpected, check the installed LangChain version."
+                        )
+                except Exception as exc:
+                    lines.append(f"Risk reason unavailable: {type(exc).__name__}: {exc}")
         if args:
             lines.append("Args:")
             lines.append(json.dumps(args, ensure_ascii=False, indent=2, default=str))
