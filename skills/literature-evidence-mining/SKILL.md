@@ -25,13 +25,34 @@ Use planned, tracked, progressive evidence mining:
 3. Search broadly enough to build a complete candidate table.
 4. For large searches, use multiple rounds, keyword families, and sources.
 5. Prioritize candidates, but do not drop lower-priority records from tracking.
-6. Process papers one by one or in small batches in priority order.
+6. Process papers one by one in priority order.
 7. Use the cheapest sufficient evidence source first.
 8. Within each paper, search the most likely evidence location before reading broadly.
 9. Escalate only when needed: metadata -> page evidence -> targeted section/page -> downloaded artifacts -> ReadAgent.
 10. Update candidate and evidence tables after every paper or small milestone.
 
 Do not stop just because high-priority papers produced an answer unless the user explicitly asked for only top results or a quick sample.
+
+## Table Flow
+
+Keep four table concepts distinct:
+
+1. `Search candidate table`: SearchAgent's raw candidate output. It contains
+   literature metadata and search-level relevance notes only.
+2. `Master candidate table`: BioInCoder's deduplicated and prioritized
+   candidate table derived from the Search candidate table.
+3. `Candidate Tracking Table`: BioInCoder's running processing-status table
+   derived from the Master candidate table as papers are browsed, read,
+   blocked, excluded, or completed.
+4. `Evidence Extraction Table`: BioInCoder's detailed evidence table derived
+   from each processed candidate. It stores extracted values, snippets,
+   locations, artifacts, confidence, and limitations.
+
+Do not collapse these tables into one vague summary. Stage reports may be
+short, but BioInCoder must preserve the complete Master candidate table,
+Candidate Tracking Table, and Evidence Extraction Table as the work progresses.
+For long or high-value mining tasks, save key working tables as downloadable
+local artifacts such as CSV, TSV, Markdown, or JSON, and report the file paths.
 
 ## Agent Roles
 
@@ -158,11 +179,10 @@ Stop broad searching only when the planned coverage target is met, the
 remaining sources are unlikely to add relevant records, or a blocker requires
 user input.
 
-SearchAgent output must include a candidate table with:
+SearchAgent output must include a `Search candidate table` with:
 
 ```text
 candidate_id
-priority_rank or provisional_priority
 title
 year
 journal_or_source
@@ -170,24 +190,29 @@ PMID
 PMCID
 DOI
 URL
-source_database
-relevance_reason
-include_exclude_status
-screening_notes
+sources
+search_reason
+search_notes
 ```
 
-If records come from multiple sources, BioInCoder must merge and deduplicate by DOI, PMID, PMCID, title, and URL.
+The `Search candidate table` is an input table, not the final working table.
+SearchAgent should not assign final priority labels or final inclusion/exclusion
+decisions. `search_reason` explains why the record was retrieved, not a final
+screening decision.
 
-Do not lose candidate records when summarizing. Stage reports may be short, but the master candidate table must remain complete.
+If records come from multiple sources, BioInCoder must merge and deduplicate by
+DOI, PMID, PMCID, title, and URL. Do not lose candidate records when summarizing.
 
 ## Phase 3: Prioritize Without Dropping Records
 
-BioInCoder should rank candidates by likelihood of containing the target evidence.
+BioInCoder converts the `Search candidate table` into the `Master candidate
+table` by merging, deduplicating, and ranking candidates by likelihood of
+containing the target evidence.
 
 Priority factors may include:
 
-- direct mention of the target entity or method in title/abstract;
-- full text or PMCID availability;
+- direct mention of the target entity or method in title, metadata, abstract
+  snippet, or SearchAgent `search_reason`;
 - likely use of methods/reagents/resources;
 - recency, paper type, and source quality;
 - user-specified importance.
@@ -204,21 +229,47 @@ duplicate
 
 Lower-priority candidates may be delayed, but not silently discarded.
 
+After prioritization, BioInCoder must create or update the `Master candidate
+table`:
+
+```text
+candidate_id
+title
+year
+journal_or_source
+PMID
+PMCID
+DOI
+URL
+sources
+search_reason
+priority
+priority_reason
+```
+
+The `Master candidate table` should not yet mix in detailed browsing/reading
+state. `proc_status`, access state, and blockers belong in the
+`Candidate Tracking Table`.
+
 ## Phase 4: Process One Paper at a Time
 
-Default mode is one-paper-at-a-time evidence closure.
+Default mode is one-paper-at-a-time evidence closure using the `Master candidate
+table` priority order.
 
 For each candidate in priority order:
 
 1. State the evidence focus for this candidate.
 2. Choose the likely evidence locations to inspect first.
-3. Check whether metadata already answers the target.
-4. If not, call BrowserAgent for that paper with the target locations.
-5. If BrowserAgent finds sufficient page-level evidence, integrate it and continue to the next paper.
-6. If BrowserAgent downloads relevant artifacts or page evidence is insufficient, call ReadAgent for those artifacts with targeted keywords and location hints.
-7. Integrate ReadAgent evidence.
-8. Update candidate status and evidence table.
-9. Continue to the next candidate unless the user requested a stopping condition that is now satisfied.
+3. Create or update the candidate's row in the `Candidate Tracking Table`.
+4. Check whether metadata already answers the target.
+5. If not, call BrowserAgent for that paper with the target locations.
+6. If BrowserAgent finds sufficient page-level evidence, add rows to the
+   `Evidence Extraction Table`, update candidate `proc_status`, and
+   continue to the next paper.
+7. If BrowserAgent downloads relevant artifacts or page evidence is insufficient, call ReadAgent for those artifacts with targeted keywords and location hints.
+8. Integrate ReadAgent evidence into the `Evidence Extraction Table`.
+9. Update candidate `proc_status` after every paper or small milestone.
+10. Continue to the next candidate unless the user requested a stopping condition that is now satisfied.
 
 This one-paper loop improves traceability and lets BioInCoder adjust strategy after each result.
 
@@ -360,11 +411,11 @@ login_notes
 page_evidence_found: yes/no
 page_evidence_summary
 evidence_snippet_or_location
-locations_checked
+checked_locations
 downloaded_artifacts
 read_agent_needed: yes/no
 reason
-blocked_reason
+block_reason
 recommended_next_step
 ```
 
@@ -406,10 +457,10 @@ ReadAgent should return:
 candidate_id
 file_path
 matched_terms
-section_table_or_sheet
-locations_checked
-evidence_snippet
-extracted_value
+location
+checked_locations
+snippet
+value
 confidence
 limitations
 read_agent_needed_next: yes/no
@@ -417,15 +468,16 @@ read_agent_needed_next: yes/no
 
 ## Tracking Tables
 
-Maintain two tables.
+After the `Master candidate table` is created, maintain two running tables.
 
 ### Candidate Tracking Table
 
-This table prevents missed literature:
+This table tracks the per-candidate state of browsing, reading, blocking,
+deferral, exclusion, and completion. It is derived from the `Master candidate
+table`, not directly from SearchAgent output.
 
 ```text
 candidate_id
-priority
 title
 year
 journal_or_source
@@ -433,14 +485,17 @@ PMID
 PMCID
 DOI
 URL
-source_database
-relevance_reason
-planned_evidence_locations
-status
-notes
+sources
+search_reason
+priority
+planned_locations
+proc_status
+access_status
+block_reason
+track_notes
 ```
 
-Recommended status values:
+Recommended `proc_status` values:
 
 ```text
 queued
@@ -464,7 +519,8 @@ deferred_low_priority
 
 ### Evidence Extraction Table
 
-This table captures extracted evidence:
+This table captures detailed evidence found while processing candidates from
+the `Master candidate table`.
 
 ```text
 candidate_id
@@ -472,31 +528,34 @@ title
 PMID
 DOI
 target_field
-extracted_value
+value
 evidence_source
-evidence_snippet
+snippet
 source_url
 file_path
-section_table_or_sheet
-locations_checked
+location
+checked_locations
 confidence
 limitations
 next_action
 ```
 
 Every extracted claim should have a URL, identifier, file path, table/section, or snippet.
+If no target evidence is found for a processed candidate, record a negative
+evidence row or clear tracking note with the locations checked and limitations.
 
 ## Stage Reports
 
-For long tasks, report progress periodically without losing the master tables.
+For long tasks, report progress periodically without losing the complete
+`Master candidate table`, `Candidate Tracking Table`, or `Evidence Extraction
+Table`.
 
 Report interim results when useful evidence has accumulated, when a batch boundary is reached, or when progress may take a long time. Good reporting points include:
 
-- after the initial candidate table is built and prioritized;
+- after the `Master candidate table` is built and prioritized;
 - after every 5-10 processed candidates;
 - after any strong evidence is found;
 - after repeated blockers suggest a strategy change;
-- before switching from search to browsing, or from browsing to reading;
 - before asking the user for access, credentials, institution choice, or a scope decision.
 
 A stage report may include:
@@ -517,9 +576,12 @@ For evidence-mining tasks, an interim report should usually include:
 - newly found high-value evidence with candidate_id and source;
 - new blockers or limitations;
 - the next planned candidate or action;
-- the location or current state of the complete candidate/evidence tables.
+- the location or current state of the complete `Master candidate table`,
+  `Candidate Tracking Table`, and `Evidence Extraction Table`.
 
-Stage reports are not a substitute for the full candidate table. After a stage report, continue the tracked workflow unless the user changes the objective or explicitly stops.
+Stage reports are not a substitute for the full working tables. After a stage
+report, continue the tracked workflow unless the user changes the objective or
+explicitly stops.
 
 ## Failure and Blocking Rules
 
@@ -531,7 +593,7 @@ If a paper is blocked:
 - preserve URL, DOI/PMID, and attempted path;
 - record access attempts, waits/retries, alternate URLs, and login/auth state
   attempts when relevant;
-- mark the candidate status;
+- mark the candidate `proc_status`;
 - continue to the next candidate when possible.
 
 Use `needs_user_input` for:
@@ -550,7 +612,7 @@ BioInCoder must write self-contained `task_brief` messages. Subagents do not rec
 
 ```text
 # Overall Goal
-Find papers that may contain [target evidence].
+Find papers that may contain [detailed target evidence].
 
 # Current Subtask
 Retrieve a broad candidate set for screening using multiple query families and
@@ -573,9 +635,12 @@ Coverage target:
 Do not open webpages, download files, or read local artifacts.
 
 # Required Output
-Return search_rounds plus a complete candidate table with candidate_id, title,
-year, journal/source, PMID, PMCID, DOI, URL, source_database, relevance_reason,
-provisional_priority, and screening_notes.
+Return search_rounds plus a complete Search candidate table with candidate_id,
+title, year, journal_or_source, PMID, PMCID, DOI, URL,
+sources, search_reason, and search_notes.
+Do not assign final priority labels. Do not make final inclusion/exclusion
+decisions unless a record is obviously unrelated; note uncertainty in
+search_notes.
 
 # Stop Condition
 Stop after the requested coverage goal is reached, selected databases are exhausted, or clear source limitations prevent further retrieval.
@@ -588,7 +653,7 @@ BioInCoder will prioritize candidates and send individual papers to BrowserAgent
 
 ```text
 # Overall Goal
-Extract or locate evidence for [target field] from the candidate paper.
+Extract or locate evidence for [detailed target field] from the candidate paper.
 
 # Current Subtask
 Open this specific paper/page and look for page-level evidence, full text, PDF,
@@ -613,9 +678,9 @@ Do not start a broad literature search. Do not deeply read downloaded PDF/Excel/
 
 # Required Output
 Return access_status, access_attempts, auth_state_used_or_saved, login_notes,
-locations_checked, page_evidence_found, evidence snippet/location if found,
+checked_locations, page_evidence_found, evidence snippet/location if found,
 downloaded_artifacts with file_path/metadata_path, read_agent_needed yes/no,
-blockers, and recommended next step.
+block_reason, and recommended next step.
 
 # Stop Condition
 Stop after checking the specified page and directly linked full text/supplement/resource artifacts, after a successful download, after a bounded anti-bot/firewall retry sequence, or when user input is needed for login, CAPTCHA, institution choice, two-factor authentication, credentials, or access permission.
@@ -651,8 +716,8 @@ section/table/sheet hints:
 Do not browse the web or search literature. Do not inspect unrelated files.
 
 # Required Output
-Return extracted_value, evidence_snippet, file_path, locations_checked,
-section/table/sheet if available, confidence, and limitations.
+Return value, snippet, file_path, checked_locations, location if available,
+confidence, and limitations.
 
 # Stop Condition
 Stop after the requested artifacts are searched or the evidence is found with sufficient support.
