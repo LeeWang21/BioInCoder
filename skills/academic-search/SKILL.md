@@ -14,6 +14,11 @@ Use this skill when SearchAgent needs to construct JSON for `academic_rest_reque
 
 The tool is intentionally flexible. Choose the database first, then write one compact JSON object.
 
+This skill owns academic API request patterns, source-specific query syntax,
+record paths, and search-result response shaping. It does not own browser
+navigation, local artifact reading, candidate tracking tables, or paper-by-paper
+evidence-mining orchestration.
+
 Allowed academic API hosts:
 
 - `https://eutils.ncbi.nlm.nih.gov/entrez/eutils`
@@ -35,9 +40,14 @@ Accepted source aliases include:
 
 General rules:
 
-- Choose source-specific retrieval scope from the task goal, coverage needs, and source behavior.
-- Use broader retrieval or multiple requests when the objective needs broad coverage, recent literature, method comparison, or review-style retrieval.
-- Use narrow retrieval only for targeted identifier lookup, DOI lookup, or quick verification.
+- Use the narrowest search that satisfies the task's coverage goal.
+- For targeted identifier lookup, DOI/title verification, or quick checks, start
+  narrow and avoid noisy broad retrieval.
+- For broad screening, recent literature, method comparison, or review-style
+  retrieval, search broadly enough, but expand through focused rounds rather
+  than one noisy query.
+- Escalate to additional sources, synonyms, date windows, or evidence-bearing
+  terms only when the current round is insufficient for the requested coverage.
 - When the objective involves recency or a relative time expression, use the runtime current date and convert it to exact date ranges.
 - Use database-supported filters instead of broad free-text dumps.
 - Use `record_path` for JSON APIs when the useful results are nested.
@@ -239,6 +249,54 @@ For a known identifier:
 - DOI: Europe PMC `query: "DOI:<doi>"` or Semantic Scholar paper endpoint.
 - arXiv ID: arXiv query by `id_list`.
 - bioRxiv DOI: bioRxiv `details/<server>/<doi>/na/json`.
+
+## Multi-Round Search Strategy
+
+Use multiple focused rounds when the task asks for broad discovery, screening,
+method comparison, recent coverage, or as many relevant records as possible.
+Start with the most likely source/query family, then expand only when the
+coverage goal is not met or source behavior suggests missing records. Do not
+rely on one broad query when terminology, source coverage, or evidence words may
+change the candidate set.
+
+Useful round types:
+
+1. Broad discovery:
+   - combine the main biological, disease, method, organism, or tool concepts;
+   - use PubMed or Europe PMC first for biomedical topics;
+   - use OpenAlex or Semantic Scholar when broad scholarly coverage matters.
+2. Evidence-bearing search:
+   - add terms such as antibody, clone, catalog, accession, GEO, SRA, code,
+     GitHub, supplement, Table S, method, protocol, primer, reagent,
+     availability, benchmark, or dataset.
+3. Synonym and alias backfill:
+   - search gene/protein aliases, old names, assay abbreviations, disease
+     synonyms, species names, tissue terms, vendor/resource names, and spelling
+     variants supplied by the task brief.
+4. Source-specific follow-up:
+   - use exact PMID, PMCID, DOI, arXiv ID, title, or author fields to recover
+     missing identifiers or metadata.
+5. Recent/preprint follow-up:
+   - use Europe PMC for topic-level preprint discovery;
+   - use bioRxiv/medRxiv API for date-window or DOI follow-up;
+   - label preprints clearly.
+
+For each round, keep the returned summary traceable:
+
+```text
+round_id
+source
+query_or_request_summary
+filters
+records_returned
+useful_records
+coverage_notes
+```
+
+When returning a candidate table, include enough identifiers and URLs for
+BioInCoder to deduplicate and route follow-up work. If coverage is incomplete,
+state whether the limit came from query breadth, source behavior, API failure,
+rate limits, date filters, or missing terminology.
 
 ## Response Guidance
 

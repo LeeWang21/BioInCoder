@@ -1062,23 +1062,13 @@ class BrowserBrowse(BaseTool):
 
             browser_instruction = HumanMessage(
                 content=(
-                    "Perform the following browser task with agent-browser CLI using CloakBrowser by default.\n\n"
+                    "BrowserAgent delegated task.\n\n"
                     f"# Task brief\n{task_brief}\n\n"
-                    "# Operating constraints\n"
-                    "- Use the smallest number of browser commands and the smallest context needed.\n"
-                    "- Stay within the task brief. Do not do ReadAgent work such as local document reading or spreadsheet analysis after download; return downloaded file paths for handoff instead.\n"
-                    "- Use an explicit agent-browser --session name for the task.\n"
-                    "- Prefer targeted snapshots, text extraction, and URLs over full-page dumps.\n"
-                    "- When only part of a page matters, use agent-browser eval or scoped snapshots to filter before extracting text.\n"
-                    "- When results, links, downloads, tables, or evidence may span multiple pages, detect pagination/load-more/infinite-scroll controls before concluding from page 1. Follow additional pages when the task asks for comprehensive coverage or the needed item is not found yet. Use compact per-page eval summaries, wait after each page change, and report if only page 1 was inspected.\n"
-                    "- After opening a page or any navigation/action, wait patiently with agent-browser wait before reading state.\n"
-                    "- If CLI syntax is uncertain, inspect agent-browser help/skills first.\n"
-                    "- CloakBrowser is the default browser backend; use cloakbrowser_config status/configure if configuration is uncertain.\n"
-                    "- If full text, PDF, or supplementary files are blocked, try public metadata/OA routes first. If the page offers access choices, prefer legitimate institutional/library access such as Access through your institution, Institutional login, OpenAthens, Shibboleth, or library proxy; do not choose Buy, Rent, Purchase PDF, or Subscribe unless the user explicitly asks. If institution selection is required, check browser_auth_config first and use the configured institution hint when available. If no institution hint is available, extract a small list of visible options or required input and ask the user instead of guessing. Then load saved auth state or use env-based login if legitimate credentials are configured.\n"
-                    "- For PDF, supplementary file, table, archive, or dataset downloads, first use browser commands to find the direct file URL, then call browser_download_artifact to save it under artifacts/browser/downloads. Report file_path and metadata_path. If the downloaded file looks like HTML/access-denied, treat it as suspect.\n"
-                    "- Close the browser/session with agent-browser close when the task is done or the session gets stuck.\n"
-                    "- Ask the user promptly whenever browser progress needs the user's choice, confirmation, manual action, credential-related input, or other interaction that should not be guessed. If asking is unavailable, return a need_user_input section for BioInCoder.\n"
-                    "- Return concise findings and cite URLs or artifact paths. Do not paste large page contents."
+                    "# Message instruction\n"
+                    "Use the task brief as the binding scope for this browser work. "
+                    "Return concise page findings, source URLs, downloaded artifact paths/metadata paths, "
+                    "access state, blockers, user-input needs, and limitations needed for BioInCoder handoff. "
+                    "Do not perform local document reading after download."
                 )
             )
 

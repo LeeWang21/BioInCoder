@@ -443,18 +443,13 @@ class ReadArtifact(BaseTool):
 
             read_instruction = HumanMessage(
                 content=(
-                    "Perform the following local document reading task.\n\n"
+                    "ReadAgent delegated task.\n\n"
                     f"# Task brief\n{task_brief}\n\n"
                     f"# File\n{file_path}\n\n"
-                    "# Operating constraints\n"
-                    "- Use markitdown_command for quick document-to-Markdown conversion and targeted text extraction.\n"
-                    "- Stay within the task brief. Do not browse the web, search literature, or perform computational analysis beyond reading the provided file.\n"
-                    "- Keep returned context small with pipe_commands and max_output_chars.\n"
-                    "- For large files or narrow objectives, prefer safe stdout pipelines such as [['grep','-i','keyword'], ['head','-n','120']] before returning text.\n"
-                    "- Save converted Markdown when useful and report output_path.\n"
-                    "- For Excel/PowerPoint/Word/PDF, do not dump the whole file unless the user explicitly asks.\n"
-                    "- If the task brief mentions a specific keyword, table, sheet, section, or figure, search/filter for that target first.\n"
-                    "- Return concise findings with file path, converted artifact path, and any limitations."
+                    "# Message instruction\n"
+                    "Use the task brief and file path as the binding scope for this reading work. "
+                    "Return extracted values/snippets, checked locations, converted artifact paths, "
+                    "confidence, and limitations needed for BioInCoder handoff."
                 )
             )
 

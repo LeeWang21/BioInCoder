@@ -14,6 +14,11 @@ Use this skill when ReadAgent needs to inspect a local document artifact with Ma
 
 The goal is not to dump the whole document. The goal is to answer the reading objective with the fewest conversion calls and the least returned context.
 
+This skill owns local artifact reading details: MarkItDown conversion, safe
+stdout filtering, low-context extraction, converted artifact paths, and
+file-type limitations. It does not own web browsing, literature search, or
+cross-paper evidence integration.
+
 ## Runtime Configuration
 
 On the server, configure this environment variable if needed:
@@ -109,6 +114,45 @@ Save the full conversion when useful:
 - `pipe_commands`: any safe stdout pipeline applied after MarkItDown;
 - `line_stats`: line counts after any pipe_commands;
 - `stderr`: conversion warnings or errors.
+
+## Evidence Location Triage
+
+Shared evidence-mining principle: use the cheapest likely evidence source
+first; inspect targeted likely locations before broad reading; escalate only
+when the current artifact layer is insufficient for the task's evidence
+standard.
+
+When reading paper-linked artifacts, supplementary files, or local documents,
+search likely locations and keyword families before expanding to broad reads.
+
+Common evidence targets and useful search terms:
+
+- antibody, reagent catalog, clone, vendor:
+  `antibody`, `clone`, `catalog`, `cat.`, `vendor`, `resource`,
+  `key resources`, target gene/protein names;
+- dataset accession:
+  `GEO`, `SRA`, `ArrayExpress`, `PRJ`, `GSE`, `E-MTAB`, `accession`,
+  `data availability`, `repository`;
+- code URL or software version:
+  `GitHub`, `code availability`, `software`, `version`, package/tool name,
+  `availability`;
+- sample size, cohort, species, tissue, cell line, animal model:
+  `sample`, `cohort`, `patient`, `mouse`, `cell line`, `tissue`,
+  `study design`, `Table 1`;
+- benchmark metric, model architecture, algorithm detail:
+  `benchmark`, `AUC`, `accuracy`, `runtime`, `memory`, `architecture`,
+  `model`, `method`, figure/table labels;
+- protocol detail, primer sequence, guide RNA, perturbation design:
+  `primer`, `sequence`, `sgRNA`, `guide`, `protocol`, `transfection`,
+  `library`, `oligo`;
+- supplementary tables or sheets:
+  `Table S`, `Supplementary Table`, `Sheet`, `xlsx`, `csv`, expected column
+  names, target entity names.
+
+Start with targeted `grep`/`rg` searches for these terms, then read nearby line
+ranges with `sed` when line numbers are available. If exact evidence is not
+found, report the searched terms, checked ranges or sections, and conversion
+limitations instead of implying the artifact was exhaustively inspected.
 
 ## Reading Rules
 

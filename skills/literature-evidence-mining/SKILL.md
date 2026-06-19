@@ -16,6 +16,12 @@ Use this skill when BioInCoder must coordinate multiple agents to find papers an
 
 This is an orchestration skill for BioInCoder. It is not a SearchAgent-only, BrowserAgent-only, or ReadAgent-only skill.
 
+This skill owns cross-agent evidence-mining strategy: scope definition,
+candidate/evidence table schemas, processing order, stage reports, and
+task-brief templates. It does not own academic API syntax, browser CLI
+mechanics, MarkItDown command patterns, or notebook execution details; those
+belong to the academic-search, browser, read, and jupytercode skills.
+
 ## Core Principle
 
 Use planned, tracked, progressive evidence mining:
@@ -275,6 +281,10 @@ This one-paper loop improves traceability and lets BioInCoder adjust strategy af
 
 ## Evidence Location Strategy
 
+Shared evidence-mining principle: use the cheapest likely evidence source
+first; inspect targeted likely locations before broad reading; escalate only
+when the current layer is insufficient for the task's evidence standard.
+
 Before opening or reading a paper, identify what kind of evidence is needed and
 inspect the most likely locations first. Do not read a whole article or dump a
 whole PDF when a targeted section, table, or supplement is likely to answer the
@@ -328,7 +338,9 @@ of the evidence standard.
 
 ## Progressive Evidence Escalation
 
-Use the cheapest sufficient evidence source.
+Use the cheapest likely evidence source first. If it satisfies the task's
+evidence standard, stop escalation for that candidate. If it is insufficient,
+move to the next evidence layer with the narrowest useful request.
 
 ### 1. Metadata Evidence
 
@@ -356,44 +368,23 @@ If page-level evidence is sufficient, do not call ReadAgent.
 
 ### Browser Access and Reliability
 
-BrowserAgent should make a serious but bounded attempt before marking a paper as
-blocked by firewall, anti-bot, or unstable page behavior:
-
-- open the page with an explicit browser session;
-- wait for load/network idle with a generous timeout, usually 120-180 seconds,
-  then inspect the page state;
-- for anti-bot checks, firewall pages, login redirects, institutional handoffs,
-  or pages that look temporarily failed, wait longer before judging failure;
-  60-120 seconds of fixed waiting is acceptable for important papers;
-- retry after reload, longer wait, or alternate public URL when reasonable;
-- try PubMed/PMC, Europe PMC, DOI landing page, publisher page, and open-access
-  links before declaring the record unreachable;
-- distinguish a temporary load failure from a visible anti-bot, CAPTCHA,
-  firewall, paywall, or login wall.
+BrowserAgent owns the browser mechanics. For literature mining, BioInCoder's
+job is to give BrowserAgent a focused target page/candidate, likely evidence
+locations, any known access notes, and the required return fields.
 
 If the page still cannot be used, BrowserAgent must mark the candidate with a
 specific blocker such as `blocked_antibot`, `blocked_firewall`,
 `blocked_login_required`, `blocked_paywall`, or `blocked_unstable_page`. The
-stage report should tell the user which URL failed, what was tried, and what
-user action or alternate route might help.
+stage report should tell the user which URL failed, what was tried at a useful
+summary level, and what user action or alternate route might help.
 
 ### Authentication and User Coordination
 
 When legitimate login or institutional access is needed to complete the task,
-BrowserAgent should actively coordinate with the user through `ask_user` instead
-of silently giving up:
-
-- check existing browser auth state first;
-- inspect configured institution/username/password availability without
-  exposing secrets;
-- ask the user for institution choice, manual login action, or credential
-  availability when needed;
-- use institution, username, and password environment variables only through
-  the approved browser login tool;
-- never print passwords, cookies, or tokens;
-- save successful authenticated browser state for reuse;
-- record the non-secret login route that worked, such as institution selected,
-  login provider, auth state path, session name, and any manual step required.
+BrowserAgent should follow the browser skill. BioInCoder should only preserve
+non-secret access context that helps later calls: institution selected, login
+provider, auth state path, browser session name, manual step required, and
+whether user input is still needed.
 
 BioInCoder should preserve successful login notes in the candidate/evidence
 tracking context so later BrowserAgent calls can reuse the same access route
@@ -436,9 +427,7 @@ commands or manual browser cache paths for normal paper PDFs, supplementary
 files, tables, archives, or dataset metadata.
 
 BrowserAgent must report `file_path` and `metadata_path` for each downloaded
-artifact. If `browser_download_artifact` reports HTML, access denied, login
-content, or another suspicious result, treat the download as incomplete and
-continue the browser/auth flow or mark the blocker.
+artifact, plus any warning that affects whether ReadAgent can trust the file.
 
 ### 4. Local Artifact Reading
 

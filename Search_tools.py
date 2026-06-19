@@ -472,19 +472,14 @@ class AcademicSearch(BaseTool):
 
             search_instruction = HumanMessage(
                 content=(
-                    "Perform an academic search for the following delegated task brief.\n\n"
+                    "SearchAgent delegated task.\n\n"
                     f"# Current date\n{date.today().isoformat()}\n\n"
                     f"# Task brief\n{task_brief}\n\n"
-                    "Use available search skills to construct database-specific JSON requests. "
-                    "Choose appropriate sources and result depth from the task brief and current context. "
-                    "When the search involves recency or a date window, calculate exact date ranges from the current date above. "
-                    "For literature retrieval, return a result set that satisfies the requested coverage goal. "
-                    "If the task asks for comprehensive screening, candidate discovery, broad coverage, or as many relevant papers as possible, "
-                    "do not summarize away relevant records; return a complete candidate table for relevant records retrieved within scope, "
-                    "with IDs/URLs/DOIs and relevance notes. "
-                    "Use academic_rest_request for retrieval. "
-                    "Return a concise evidence-oriented answer with source names, IDs/URLs/DOIs when available, "
-                    "and note unresolved uncertainty. Do not fabricate papers or identifiers."
+                    "# Message instruction\n"
+                    "Use the task brief as the binding scope for this search. "
+                    "Use the current date only to resolve relative recency/date windows. "
+                    "Return the requested records, candidate table, identifiers, URLs, source notes, "
+                    "and limitations needed for BioInCoder handoff."
                 )
             )
 

@@ -14,6 +14,11 @@ Use this skill when BrowserAgent needs to browse a web page using `agent-browser
 
 The goal is not to scrape everything. The goal is to complete the browser objective with the fewest commands and the least context.
 
+This skill owns browser operation details: CLI syntax, sessions, waits,
+authentication state, downloads, pagination, low-context extraction, cleanup,
+and browser failure recovery. It does not own literature candidate tracking,
+local document reading after download, or final evidence integration.
+
 ## Runtime Configuration
 
 On the server, configure these environment variables if needed:
@@ -118,7 +123,7 @@ The tool does not return the password.
 It fills credentials using `agent-browser eval --stdin` so the password is not placed in CLI arguments.
 If selectors are unknown, browse the login page first, use a minimal snapshot/eval to identify selectors, then call `browser_login_with_env`.
 
-## Authentication Communication
+## Authentication and User Coordination
 
 When login, institutional access, consent, CAPTCHA, two-factor authentication,
 or another user-facing access step is needed, BrowserAgent should actively
@@ -149,6 +154,15 @@ Use this order:
 Do not expose passwords, cookies, tokens, usernames, or private account details
 in final answers or tool outputs. Do not keep retrying blind login actions when
 the next step clearly requires user input.
+
+If user input is needed, ask one concrete question with the current URL, visible
+prompt, and the specific action or choice required. If `ask_user` is unavailable
+or fails, return a `need_user_input` section so BioInCoder can ask from the main
+loop.
+
+When authentication succeeds, return only non-secret access notes that help
+future browser work: institution selected, login provider, auth state path,
+session name, manual step completed, and remaining access limitations.
 
 ## Full Text / Download Access
 
@@ -194,6 +208,46 @@ When the task requires article full text, PDF, supplementary files, or other pro
 
 Do not bypass paywalls or access controls except through legitimate user-provided credentials/session state.
 Do not use authenticated access for bulk downloading unless the user explicitly asks and the access terms permit it.
+
+## Paper Evidence Location Triage
+
+Shared evidence-mining principle: use the cheapest likely evidence source
+first; inspect targeted likely locations before broad reading; escalate only
+when the current page layer is insufficient for the task's evidence standard.
+
+When browsing an article, preprint, dataset page, protocol page, software page,
+or publisher landing page for specific evidence, inspect the most likely
+page-level locations before reading broadly or downloading files.
+
+Common evidence targets and likely page locations:
+
+- antibody, reagent catalog, clone, vendor:
+  methods, key resources table, resource availability, STAR Methods,
+  supplementary links, supplement table descriptions;
+- dataset accession:
+  data availability, methods, abstract/metadata, GEO/SRA/ArrayExpress links,
+  repository links, supplementary information;
+- code URL or software version:
+  code availability, data/code availability, methods, GitHub links, software
+  section, repository badges or links;
+- sample size, cohort, species, tissue, cell line, animal model:
+  abstract, methods, results overview, table 1, study design, supplement links;
+- benchmark metric, model architecture, algorithm detail:
+  methods, results figures, benchmark tables, figure legends, supplement links,
+  code repository;
+- protocol detail, primer sequence, guide RNA, perturbation design:
+  methods, supplementary methods, supplementary tables, protocol repository;
+- resource/file availability:
+  article landing page attachments, data availability, supplementary file list,
+  repository records, download tables.
+
+Use page-level evidence when it is sufficient. Download artifacts only when the
+target evidence is not visible on the page, exact snippets/tables are required,
+or the page points to a file that likely contains the answer.
+
+When evidence is not found, report which visible locations were checked and
+which likely locations remain uninspected because of access, missing links, or
+format limitations.
 
 ## Downloads
 
@@ -400,6 +454,32 @@ For anti-bot checks, firewall pages, slow login redirects, and institutional
 handoffs, waiting 60-120 seconds before declaring failure is acceptable when the
 page is important to the task.
 
+## Browser Access and Reliability
+
+Before marking a target page as unusable, make a serious but bounded attempt to
+understand the page state and recover when recovery is reasonable.
+
+Access/reliability checklist:
+
+1. Confirm the current URL and title after navigation.
+2. Wait for the relevant page state before extraction.
+3. If the page is slow, temporarily blocked, or mid-redirect, wait longer before
+   judging failure.
+4. If the page state is unchanged after a long wait, reload once when retrying
+   is reasonable.
+5. If refs are stale after navigation or dynamic content changes, take a fresh
+   snapshot before acting.
+6. If the session or daemon appears stuck, close the affected session and retry
+   from the minimum needed URL/context.
+7. Try lighter public routes when appropriate, such as PubMed/PMC, Europe PMC,
+   DOI metadata, publisher metadata, or already known open-access links.
+8. Distinguish blockers precisely: anti-bot, firewall, login required, paywall,
+   CAPTCHA/2FA, unstable page, missing file, or source unavailable.
+
+When reliability problems remain, stop that target within the failure budget and
+return what was attempted, the blocker category, partial findings, and the next
+best route or user action.
+
 ## Session Cleanup
 
 Always close the browser/session when:
@@ -462,6 +542,10 @@ Recovery pattern:
 Do not keep sending heavy snapshots or full-page extraction commands to a stuck session.
 
 ## Token-Minimal Browsing
+
+Shared evidence-mining principle: use the cheapest likely evidence source
+first; inspect targeted likely locations before broad reading; escalate only
+when narrower browser extraction cannot answer the task.
 
 Use the narrowest extraction that answers the objective.
 This is mandatory. Browser work should use the minimum tokens and minimum context window needed to finish the task.

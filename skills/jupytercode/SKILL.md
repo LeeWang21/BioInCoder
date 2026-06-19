@@ -14,6 +14,12 @@ Use this skill when BioInCoder should perform notebook-backed interactive coding
 
 This skill is best suited for **interactive analysis**: iterative coding, inspecting intermediate objects, debugging data issues, refining parameters, and progressively building an analysis workflow.
 
+This skill owns notebook-backed coding details: kernel/session selection,
+notebook editing and execution, error recovery, notebook cleanup, and
+reproducible analysis organization. It does not own literature search, browser
+navigation, or local document reading unless those produce inputs for notebook
+analysis.
+
 The final notebook should be a **well-organized analysis notebook**, not a raw code recorder:
 - keep the final notebook complete, ordered, and readable from top to bottom;
 - organize the workflow into clear sections;
