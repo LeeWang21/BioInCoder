@@ -32,6 +32,7 @@ The final notebook should be a **well-organized analysis notebook**, not a raw c
 
 1. **Choose a kernel**
    - If the user did not specify a kernel, use `jupytercode_kernel_selection` guidance.
+   - Ask the user to choose or confirm the kernel when no kernel is specified or multiple suitable kernels are available.
    - Match code language to kernel language: Python code to Python kernel, R code to R kernel.
    - Prefer an environment where required packages are already installed.
    - Do not install packages unless the user explicitly approves.

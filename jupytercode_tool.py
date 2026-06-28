@@ -17,6 +17,8 @@ from jupyter_client import KernelManager
 from langchain_core.tools import BaseTool, BaseToolkit, tool
 
 
+SOURCE_PREVIEW_CHARS = 1600
+
 
 # -----------------------------------------------------------------------------
 # Small helpers
@@ -305,6 +307,7 @@ class NotebookSession:
 
         out = ok_response(
             cell_index=index,
+            source_preview=self._trim(source, SOURCE_PREVIEW_CHARS),
             execution_count=result["execution_count"],
             output_preview=result["preview"],
             error=result.get("error"),
@@ -344,6 +347,7 @@ class NotebookSession:
         executed = self.execute_cell(idx, timeout_seconds=timeout_seconds)
         out = ok_response(
             cell_index=idx,
+            source_preview=self._trim(source, SOURCE_PREVIEW_CHARS),
             execution_count=executed["execution_count"],
             output_preview=executed["output_preview"],
             error=executed.get("error"),
