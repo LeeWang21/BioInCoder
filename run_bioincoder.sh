@@ -24,4 +24,4 @@ if sys.version_info < (3, 10):
     )
 PY
 
-"$PYTHON_BIN" Run.py "$@"
+"$PYTHON_BIN" bioincoder_cli.py run "$@"

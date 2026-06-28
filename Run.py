@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover - runtime fallback for minimal environme
     FileHistory = None
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the BioInCoder CLI.")
     parser.add_argument("--user-id", default=os.environ.get("BIOINCODER_USER_ID", "default_user"))
     parser.add_argument("--session-id", default=os.environ.get("BIOINCODER_SESSION_ID", "default_session"))
@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("BIOINCODER_THREAD_ID"),
         help="Advanced: optional sub-thread id. By default, session-id is the restart key.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def print_message_update(update: dict) -> None:
@@ -163,21 +163,20 @@ def make_resume_command(interrupt_info: Any, user_answer: str) -> Command:
     return Command(resume=user_answer)
 
 
-def main() -> None:
-    args = parse_args()
-    os.environ["BIOINCODER_USER_ID"] = args.user_id
-    os.environ["BIOINCODER_SESSION_ID"] = args.session_id
+def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> None:
+    os.environ["BIOINCODER_USER_ID"] = user_id
+    os.environ["BIOINCODER_SESSION_ID"] = session_id
 
     from AgentConfigSetup import multi_agent_runtime
 
     bioincoder = multi_agent_runtime.agent_registry.build_agent(agent_name="BioInCoder")
-    internal_thread_id = graph_thread_id(args.user_id, args.session_id, args.thread_id)
+    internal_thread_id = graph_thread_id(user_id, session_id, thread_id)
     config = {"configurable": {"thread_id": internal_thread_id}}
     repl_session = make_prompt_session()
 
     print(
         "BioInCoder started "
-        f"(user_id={args.user_id}, session_id={args.session_id}, "
+        f"(user_id={user_id}, session_id={session_id}, "
         f"checkpoint_thread_id={internal_thread_id})."
     )
     if repl_session is None:
@@ -236,6 +235,15 @@ def main() -> None:
     finally:
         multi_agent_runtime.jupyter_registry.shutdown_all()
         print("Shut down all Jupyter kernel sessions.")
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
+    run_repl(
+        user_id=args.user_id,
+        session_id=args.session_id,
+        thread_id=args.thread_id,
+    )
 
 
 if __name__ == "__main__":
