@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from Persistence import artifacts_root
+from Transcript import DEFAULT_HISTORY_LIMIT, TranscriptStore, format_entries
 
 
 def _add_session_args(parser: argparse.ArgumentParser) -> None:
@@ -48,17 +49,28 @@ def _cmd_validate_skills(args: argparse.Namespace) -> int:
     return validate_skills.main()
 
 
-def _session_rows() -> list[tuple[str, str, Path, int]]:
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def _session_rows() -> list[tuple[str, str, Path, int, int]]:
     sessions_root = artifacts_root() / "sessions"
     if not sessions_root.exists():
         return []
 
-    rows: list[tuple[str, str, Path, int]] = []
+    rows: list[tuple[str, str, Path, int, int]] = []
     for user_dir in sorted(path for path in sessions_root.iterdir() if path.is_dir()):
         for session_dir in sorted(path for path in user_dir.iterdir() if path.is_dir()):
             messages_dir = session_dir / "messages"
             message_count = len(list(messages_dir.glob("*.json"))) if messages_dir.exists() else 0
-            rows.append((user_dir.name, session_dir.name, session_dir, message_count))
+            transcript_count = TranscriptStore(user_dir.name, session_dir.name).count()
+            rows.append((user_dir.name, session_dir.name, session_dir, message_count, transcript_count))
     return rows
 
 
@@ -69,11 +81,27 @@ def _cmd_list_sessions(args: argparse.Namespace) -> int:
         return 0
 
     print(f"Sessions under {artifacts_root() / 'sessions'}:")
-    for user_id, session_id, session_dir, message_count in rows:
+    for user_id, session_id, session_dir, message_count, transcript_count in rows:
         print(
             f"- user_id={user_id} session_id={session_id} "
+            f"transcript_entries={transcript_count} "
             f"saved_message_refs={message_count} path={session_dir}"
         )
+    return 0
+
+
+def _cmd_history(args: argparse.Namespace) -> int:
+    import os
+
+    user_id = args.user_id or os.environ.get("BIOINCODER_USER_ID", "default_user")
+    session_id = args.session_id or os.environ.get("BIOINCODER_SESSION_ID", "default_session")
+    transcript = TranscriptStore(user_id=user_id, session_id=session_id)
+
+    if args.path:
+        print(transcript.path)
+        return 0
+
+    print(format_entries(transcript.read_recent(args.limit)))
     return 0
 
 
@@ -97,6 +125,18 @@ def build_parser() -> argparse.ArgumentParser:
     sessions_subparsers = sessions_parser.add_subparsers(dest="sessions_command")
     list_parser = sessions_subparsers.add_parser("list", help="List saved session artifact directories.")
     list_parser.set_defaults(func=_cmd_list_sessions)
+
+    history_parser = subparsers.add_parser("history", help="Show recent main conversation transcript entries.")
+    history_parser.add_argument("--user-id", default=None, help="BioInCoder user id.")
+    history_parser.add_argument("--session-id", default=None, help="BioInCoder session id.")
+    history_parser.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=DEFAULT_HISTORY_LIMIT,
+        help=f"Number of recent transcript entries to show. Default: {DEFAULT_HISTORY_LIMIT}.",
+    )
+    history_parser.add_argument("--path", action="store_true", help="Print the transcript file path only.")
+    history_parser.set_defaults(func=_cmd_history)
 
     return parser
 

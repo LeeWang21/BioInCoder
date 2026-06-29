@@ -8,6 +8,7 @@ from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 
 from Persistence import graph_thread_id
+from Transcript import DEFAULT_HISTORY_LIMIT, TranscriptStore, format_entries
 
 try:
     from prompt_toolkit import PromptSession
@@ -31,15 +32,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def print_message_update(update: dict) -> None:
+def print_message_update(update: dict, transcript: TranscriptStore | None = None) -> None:
     if "messages" not in update or not isinstance(update["messages"], list):
         return
 
     for msg in update["messages"]:
         if isinstance(msg, AIMessage) and msg.content:
             print(f"\n----------\nAI Message\n----------\n{msg.content}\n\n")
+            if transcript is not None:
+                transcript.append(
+                    "assistant",
+                    str(msg.content),
+                    metadata={"message_type": type(msg).__name__},
+                )
         elif isinstance(msg, ToolMessage) and msg.content:
             print(f"\n----------\nTool Message\n----------\n{msg.content}\n\n")
+            if transcript is not None:
+                transcript.append(
+                    "tool",
+                    str(msg.content),
+                    metadata={
+                        "message_type": type(msg).__name__,
+                        "tool_call_id": getattr(msg, "tool_call_id", None),
+                    },
+                )
 
 
 def clean_repl_input(text: str) -> tuple[str, bool]:
@@ -163,6 +179,39 @@ def make_resume_command(interrupt_info: Any, user_answer: str) -> Command:
     return Command(resume=user_answer)
 
 
+def parse_history_limit(command: str) -> int:
+    parts = command.split()
+    if len(parts) == 1:
+        return DEFAULT_HISTORY_LIMIT
+    if len(parts) != 2:
+        raise ValueError("Usage: /history [n]")
+    try:
+        limit = int(parts[1])
+    except ValueError as exc:
+        raise ValueError("History limit must be a positive integer.") from exc
+    if limit <= 0:
+        raise ValueError("History limit must be a positive integer.")
+    return limit
+
+
+def handle_repl_command(command: str, transcript: TranscriptStore) -> bool:
+    command_lower = command.lower()
+    if command_lower == "/transcript":
+        print(f"Transcript: {transcript.path}")
+        return True
+
+    if command_lower == "/history" or command_lower.startswith("/history "):
+        try:
+            limit = parse_history_limit(command)
+        except ValueError as exc:
+            print(str(exc))
+            return True
+        print(format_entries(transcript.read_recent(limit)))
+        return True
+
+    return False
+
+
 def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> None:
     os.environ["BIOINCODER_USER_ID"] = user_id
     os.environ["BIOINCODER_SESSION_ID"] = session_id
@@ -173,15 +222,18 @@ def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> Non
     internal_thread_id = graph_thread_id(user_id, session_id, thread_id)
     config = {"configurable": {"thread_id": internal_thread_id}}
     repl_session = make_prompt_session()
+    transcript = TranscriptStore(user_id=user_id, session_id=session_id)
 
     print(
         "BioInCoder started "
         f"(user_id={user_id}, session_id={session_id}, "
         f"checkpoint_thread_id={internal_thread_id})."
     )
+    print(f"Transcript: {transcript.path}")
+    print(f"Previous transcript entries: {transcript.count()}")
     if repl_session is None:
         print("prompt_toolkit is not available; falling back to basic input().")
-    print("Use /exit or Ctrl-D to quit. Ctrl-C clears the current input line.")
+    print("Use /history [n], /transcript, /exit, or Ctrl-D. Ctrl-C clears the current input line.")
 
     try:
         while True:
@@ -194,6 +246,10 @@ def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> Non
                 print("Exiting.")
                 break
 
+            if handle_repl_command(user_input, transcript):
+                continue
+
+            transcript.append("user", user_input)
             graph_input = {"messages": [HumanMessage(content=user_input)]}
 
             while True:
@@ -215,20 +271,28 @@ def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> Non
                             print(interrupt_info)
                             prompt = "BioInCoder needs input> "
 
-                        user_answer = read_repl_input(repl_session, prompt)
-                        if user_answer is None:
-                            print("\nExiting.")
-                            return
-                        if user_answer.lower() in {"/exit", "/quit"}:
-                            print("Exiting.")
-                            return
+                        while True:
+                            user_answer = read_repl_input(repl_session, prompt)
+                            if user_answer is None:
+                                print("\nExiting.")
+                                return
+                            if user_answer.lower() in {"/exit", "/quit"}:
+                                print("Exiting.")
+                                return
+                            if not handle_repl_command(user_answer, transcript):
+                                break
+                        transcript.append(
+                            "user",
+                            user_answer,
+                            metadata={"kind": "interrupt_resume"},
+                        )
                         graph_input = make_resume_command(interrupt_info, user_answer)
                         interrupted = True
                         break
 
                     for update in chunk["data"].values():
                         if update is not None:
-                            print_message_update(update)
+                            print_message_update(update, transcript=transcript)
 
                 if not interrupted:
                     break
