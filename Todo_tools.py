@@ -1,7 +1,7 @@
 from typing import Type, Literal
 from pydantic import BaseModel, Field, ConfigDict
 from langchain.tools import BaseTool, ToolRuntime 
-from langchain.messages import HumanMessage, ToolMessage
+from langchain.messages import ToolMessage
 
 from langgraph.types import Command, interrupt
 from Tool_utils import is_graph_interrupt, tool_error_command
@@ -12,8 +12,10 @@ class PlanChecklistStep(BaseModel):
         ...,
         description=(
             "A short, concrete, verifiable checklist step. "
-            "It should describe one meaningful unit of work. "
-            "For steps without minor revision, Keep the original step wording."
+            "Describe one meaningful unit of work with a clear action and expected checkpoint. "
+            "Prefer task-specific wording tied to the user's files, data, code, question, or deliverable. "
+            "Avoid vague filler such as 'analyze data', 'do research', 'finalize', or optional future work. "
+            "For steps without minor revision, keep the original step wording."
         ),
     )
 
@@ -49,21 +51,6 @@ def _count_in_progress(checklist: list[dict]) -> int:
     return sum(step.get("status") == "in_progress" for step in checklist)
 
 
-def _coerce_plan(plan_state: dict) -> dict:
-    plan = plan_state.get("plan")
-    if plan:
-        return dict(plan)
-
-    structured_response = plan_state.get("structured_response")
-    if structured_response is None:
-        return {}
-
-    if hasattr(structured_response, "model_dump"):
-        return structured_response.model_dump()
-
-    return dict(structured_response)
-
-
 def _format_plan(plan: dict) -> str:
     checklist = _format_checklist(plan.get("checklist", []))
     return (
@@ -72,96 +59,212 @@ def _format_plan(plan: dict) -> str:
     )
 
 
-class WritePlanInput(BaseModel):
+class SetPlanInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True) #allow arbitrary types so Pydantic accepts ToolRuntime 
-    task_brief: str = Field(
+
+    overview: str = Field(
         ...,
         description=(
-            "Self-contained handoff brief for Planner. Subagents do not receive the full BioInCoder conversation. "
-            "Include: Overall Goal, Current Subtask, Relevant Context, Inputs such as files/data/URLs/IDs, Scope Boundary, "
-            "Required Output, Stop Condition, and Handoff. Include user constraints, assumptions, expected deliverables, "
-            "validation criteria, and what should not be executed during planning. Prefer detailed structured text over a vague request."
-        )
+            "Markdown execution brief for the current task, based on the current conversation context. "
+            "Make it sufficient for later execution without reconstructing the planning discussion. "
+            "Include the user's goal, relevant context already known, important constraints, assumptions/defaults, "
+            "proposed approach and order of work, validation or done criteria, and expected deliverable. "
+            "Keep it concise and omit sections that do not matter for the task."
+        ),
+    )
+    checklist: list[PlanChecklistStep] = Field(
+        ...,
+        description=(
+            "Complete ordered execution checklist for the current task. "
+            "Each item should be concrete, task-specific, sequential, and independently verifiable. "
+            "Prefer 3-8 steps for most tasks. Split genuinely separate phases, but avoid over-fragmented micro-steps. "
+            "Include validation or handoff as a checklist item when it is part of completion. "
+            "Use exactly one 'in_progress' item while work remains, normally the first actionable step. "
+            "Use only 'pending', 'in_progress', and 'completed'."
+        ),
+    )
+    plan_required: bool = Field(
+        True,
+        description="Whether this task needs an explicit plan.",
     )
     runtime: ToolRuntime
     #Ref https://forum.langchain.com/t/how-to-access-tool-call-id-using-runtime/2166
 
 
 
-class WritePlan(BaseTool):
-    name: str = "write_plan"
+class SetPlan(BaseTool):
+    name: str = "set_plan"
     description: str = (
-        "Create the initial plan or reset the current plan for the current user task. "
+        "Create the initial plan or reset the current plan from the current conversation context. "
         "Use this tool when there is no plan yet and the task benefits from planning, "
         "or when a major replan is needed because the goal, strategy, overview, scope, or checklist structure has changed substantially. "
-        "The tool calls a planner subagent using the current conversation/runtime state and the provided task_brief. "
-        "It returns a human- and agent-readable planning brief plus an ordered checklist with statuses. "
+        "Provide a decision-complete overview and a complete ordered checklist directly in the tool arguments. "
+        "The tool validates the plan, asks the user to approve/refine/skip it, and saves approved plans to state. "
         "Do not use this tool for simple one-step questions, direct factual answers, minor checklist edits, or routine progress advancement. "
         "For small checklist item revisions, use update_checklist. "
         "For only completing the current step and starting the next one, use advance_checklist. "
         "This tool only plans; it does not execute the task, modify files, run analysis, or produce the final deliverable."
     )
-    args_schema: Type[BaseModel] = WritePlanInput
+    args_schema: Type[BaseModel] = SetPlanInput
 
-    def _run(self, runtime: ToolRuntime, task_brief: str):
+    def _run(
+        self,
+        runtime: ToolRuntime,
+        overview: str,
+        checklist: list[PlanChecklistStep],
+        plan_required: bool = True,
+    ):
         try:
-            from AgentConfigSetup import multi_agent_runtime
+            checklist = _coerce_checklist(checklist)
+            overview = overview.strip()
 
-            planner_instruction = HumanMessage(
-                content=(
-                    "Create or update the execution plan for the following delegated task brief.\n\n"
-                    f"# Task brief\n{task_brief}\n\n"
-                    "Use the current conversation and runtime state as context. "
-                    "If a plan already exists in context, reset it for major revision instead of starting from scratch. "
-                    "Return only the required PlanOutputFormat structured output."
-                )
-            )
-
-            request_id = runtime.tool_call_id
-            planner_config = multi_agent_runtime.make_child_config(
-                parent_config=getattr(runtime, "config", None),
-                agent_name="planner",
-                request_id=request_id,
-            )
-            plan_state, message_ref = multi_agent_runtime.invoke_agent(
-                agent_name="planner",
-                graph_input={"messages": [planner_instruction]},
-                request_id=request_id,
-                config=planner_config,
-            )
-
-            plan = _coerce_plan(plan_state)
-            plan_required = bool(plan.get("plan_required", False))
-            plan_context = (
-                _format_plan(plan)
-                if plan_required
-                else (
-                    "No executable plan was produced. Either the user quit plan generation "
-                    "or the planner returned plan_required=False."
-                )
-            )
-            if message_ref is not None:
-                plan_context = (
-                    f"{plan_context}\n\n"
-                    "# Saved subagent messages\n"
-                    f"{message_ref.to_tool_hint()}"
+            if plan_required and not overview:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content="Plan overview is empty. Revise the plan overview and call set_plan again.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
                 )
 
-            update = {
-                "messages": [ToolMessage(content=plan_context, tool_call_id=runtime.tool_call_id)]
+            if plan_required and not checklist:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content="Plan checklist is empty. Revise the checklist and call set_plan again.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            checklist_in_progress = _count_in_progress(checklist)
+            checklist_string = _format_checklist(checklist)
+
+            if checklist_in_progress > 1:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content=(
+                                    "Do not set more than one checklist item to 'in_progress'. "
+                                    "Revise the plan checklist and call set_plan again:\n\n"
+                                    f"{checklist_string}"
+                                ),
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            has_pending = any(step.get("status") == "pending" for step in checklist)
+            if plan_required and has_pending and checklist_in_progress == 0:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content=(
+                                    "The checklist has pending work but no 'in_progress' item. "
+                                    "Set exactly one active step and call set_plan again:\n\n"
+                                    f"{checklist_string}"
+                                ),
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            plan = {
+                "plan_required": plan_required,
+                "overview": overview,
+                "checklist": checklist,
             }
+            plan_context = _format_plan(plan)
 
-            if plan:
-                update["plan"] = plan
+            if not plan_required:
+                return Command(
+                    update={
+                        "plan": plan,
+                        "messages": [
+                            ToolMessage(
+                                content="Plan was marked as not required for this task.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ],
+                    }
+                )
 
-            return Command(update=update)
+            comment = interrupt(
+                f"{plan_context}\n\n"
+                'Reply "yes" to approve the plan.\n'
+                'Reply "exit" to continue without an explicit plan.\n'
+                "Reply with comments if the plan needs refinement.\n"
+            )
+
+            if comment.strip().lower() in {
+                "yes",
+                "yeah",
+                "yep",
+                "ok",
+                "correct",
+                "good",
+                "perfect",
+                "no comment",
+            }:
+                return Command(
+                    update={
+                        "plan": plan,
+                        "messages": [
+                            ToolMessage(
+                                content=f"Plan approved and saved:\n\n{plan_context}",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ],
+                    }
+                )
+
+            if comment.strip().lower() in {"exit", "exiting", "quit"}:
+                return Command(
+                    update={
+                        "plan": {
+                            **plan,
+                            "plan_required": False,
+                        },
+                        "messages": [
+                            ToolMessage(
+                                content="User chose to continue without an explicit plan.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ],
+                    }
+                )
+
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=(
+                                "The proposed plan needs refinement. "
+                                "Revise the plan from the current conversation context and call set_plan again.\n\n"
+                                f"# Proposed plan\n{plan_context}\n\n"
+                                f"# User comment\n{comment}"
+                            ),
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ]
+                }
+            )
         except Exception as exc:
             if is_graph_interrupt(exc):
                 raise
             return tool_error_command(
                 exc,
                 tool_call_id=runtime.tool_call_id,
-                hint="Planner subagent failed. Retry write_plan with a clearer task_brief or inspect logs.",
+                hint="set_plan failed. Revise the overview/checklist and retry.",
             )
     
 
@@ -315,7 +418,7 @@ class AdvanceChecklist(BaseTool):
         "It marks that step as 'completed' and moves the next pending step to 'in_progress'. "
         "Do not use this to add, remove, split, merge, reword, or reorder checklist items. "
         "For minor checklist item revisions, use update_checklist. "
-        "For major replanning, use write_plan."
+        "For major replanning, use set_plan."
     )
     args_schema: type[BaseModel] = AdvanceChecklistInput
 

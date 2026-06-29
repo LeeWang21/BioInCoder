@@ -7,7 +7,7 @@ from Middleware import check_plan, shell_approval, StorePlanOutputMiddleware
 from Ask_user_tool import AskUserTool
 from Message_tools import ReadAgentMessages, ListSavedMessageRefs
 from Skill_tool import SkillTool, generate_skill_tool_prompt
-from Todo_tools import WritePlan, UpdateChecklist, AdvanceChecklist
+from Todo_tools import SetPlan, UpdateChecklist, AdvanceChecklist
 from LLM import llm, llm_flash
 from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, BIOINCODER_PROMPT
 from Runtime import MultiAgentRuntime, BioInCoderState
@@ -114,7 +114,7 @@ agent_registry.register_tool(name="Skill_tool_Planner", tool=SkillTool(agent_nam
 agent_registry.register_tool(name="Skill_tool_Search", tool=SkillTool(agent_name="search"))
 agent_registry.register_tool(name="Skill_tool_Browser", tool=SkillTool(agent_name="browser"))
 agent_registry.register_tool(name="Skill_tool_Read", tool=SkillTool(agent_name="reader"))
-agent_registry.register_tool(name="Write_plan", tool=WritePlan())
+agent_registry.register_tool(name="Set_plan", tool=SetPlan())
 agent_registry.register_tool(name="Update_checklist", tool=UpdateChecklist())
 agent_registry.register_tool(name="Advance_checklist", tool=AdvanceChecklist())
 agent_registry.register_tool(name="Read_agent_messages", tool=ReadAgentMessages())
@@ -233,7 +233,7 @@ tools_for_Coder = [
     "Academic_search",
     "Browser_browse",
     "Read_artifact",
-    "Write_plan",
+    "Set_plan",
     "Update_checklist",
     "Advance_checklist",
     "jupytercode_kernel_selection",
