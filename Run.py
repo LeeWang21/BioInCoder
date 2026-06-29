@@ -8,7 +8,12 @@ from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 
 from Persistence import graph_thread_id
-from Transcript import DEFAULT_HISTORY_LIMIT, TranscriptStore, format_entries
+from Transcript import (
+    DEFAULT_HISTORY_LIMIT,
+    TranscriptStore,
+    format_entries,
+    format_subagent_transcript_refs,
+)
 
 try:
     from prompt_toolkit import PromptSession
@@ -179,37 +184,94 @@ def make_resume_command(interrupt_info: Any, user_answer: str) -> Command:
     return Command(resume=user_answer)
 
 
-def parse_history_limit(command: str) -> int:
-    parts = command.split()
-    if len(parts) == 1:
+def parse_transcript_limit(parts: list[str]) -> int:
+    if not parts:
         return DEFAULT_HISTORY_LIMIT
-    if len(parts) != 2:
-        raise ValueError("Usage: /history [n]")
+    if len(parts) == 1 and parts[0].isdigit():
+        value = parts[0]
+    if len(parts) == 2 and parts[0] == "show":
+        value = parts[1]
+    elif len(parts) == 1 and parts[0] == "show":
+        return DEFAULT_HISTORY_LIMIT
+    elif not (len(parts) == 1 and parts[0].isdigit()):
+        raise ValueError("Usage: /transcript [show [n] | path | subagents | subagent <channel> <request_id> [prefix|xml]]")
     try:
-        limit = int(parts[1])
+        limit = int(value)
     except ValueError as exc:
-        raise ValueError("History limit must be a positive integer.") from exc
+        raise ValueError("Transcript limit must be a positive integer.") from exc
     if limit <= 0:
-        raise ValueError("History limit must be a positive integer.")
+        raise ValueError("Transcript limit must be a positive integer.")
     return limit
 
 
-def handle_repl_command(command: str, transcript: TranscriptStore) -> bool:
-    command_lower = command.lower()
-    if command_lower == "/transcript":
-        print(f"Transcript: {transcript.path}")
-        return True
+def repl_subagent_transcript_refs(runtime: Any) -> dict[str, list[str]]:
+    refs: dict[str, list[str]] = {}
+    for channel_name, requests in runtime.message_container.channels.items():
+        if requests:
+            refs[channel_name] = list(requests.keys())
+    return refs
 
-    if command_lower == "/history" or command_lower.startswith("/history "):
+
+def handle_repl_command(command: str, transcript: TranscriptStore, runtime: Any | None = None) -> bool:
+    command = command.strip()
+    command_lower = command.lower()
+    if not (command_lower == "/transcript" or command_lower.startswith("/transcript ")):
+        return False
+
+    parts = command.split()[1:]
+    parts_lower = [part.lower() for part in parts]
+
+    if not parts or parts_lower[0] == "show" or (len(parts) == 1 and parts[0].isdigit()):
         try:
-            limit = parse_history_limit(command)
+            limit = parse_transcript_limit(parts_lower)
         except ValueError as exc:
             print(str(exc))
             return True
         print(format_entries(transcript.read_recent(limit)))
         return True
 
-    return False
+    if parts_lower == ["path"]:
+        print(f"Transcript: {transcript.path}")
+        return True
+
+    if parts_lower == ["subagents"]:
+        if runtime is None:
+            print("(subagent transcripts are unavailable before runtime initialization)")
+        else:
+            print(format_subagent_transcript_refs(repl_subagent_transcript_refs(runtime)))
+        return True
+
+    if len(parts) in {3, 4} and parts_lower[0] == "subagent":
+        if runtime is None:
+            print("(subagent transcripts are unavailable before runtime initialization)")
+            return True
+        output_format = parts[3].lower() if len(parts) == 4 else "prefix"
+        if output_format not in {"prefix", "xml"}:
+            print("Subagent transcript format must be 'prefix' or 'xml'.")
+            return True
+        try:
+            print(runtime.read_messages_as_context(parts[1], parts[2], format=output_format))
+        except Exception as exc:
+            print(f"Could not read subagent transcript: {exc}")
+        return True
+
+    print("Usage: /transcript [show [n] | path | subagents | subagent <channel> <request_id> [prefix|xml]]")
+    return True
+
+
+def unpack_stream_chunk(chunk: Any) -> tuple[Any, dict]:
+    if isinstance(chunk, tuple) and len(chunk) == 2:
+        namespace, data = chunk
+        return namespace, data or {}
+    if isinstance(chunk, dict):
+        namespace = chunk.get("namespace") or chunk.get("path") or ()
+        data = chunk.get("data", chunk)
+        return namespace, data or {}
+    return (), {}
+
+
+def is_top_level_namespace(namespace: Any) -> bool:
+    return namespace in (None, "", (), [])
 
 
 def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> None:
@@ -233,7 +295,7 @@ def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> Non
     print(f"Previous transcript entries: {transcript.count()}")
     if repl_session is None:
         print("prompt_toolkit is not available; falling back to basic input().")
-    print("Use /history [n], /transcript, /exit, or Ctrl-D. Ctrl-C clears the current input line.")
+    print("Use /transcript, /transcript path, /exit, or Ctrl-D. Ctrl-C clears the current input line.")
 
     try:
         while True:
@@ -246,7 +308,7 @@ def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> Non
                 print("Exiting.")
                 break
 
-            if handle_repl_command(user_input, transcript):
+            if handle_repl_command(user_input, transcript, runtime=multi_agent_runtime):
                 continue
 
             transcript.append("user", user_input)
@@ -262,8 +324,11 @@ def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> Non
                     version="v2",
                     subgraphs=True,
                 ):
-                    if "__interrupt__" in chunk["data"]:
-                        interrupt_info = chunk["data"]["__interrupt__"][0].value
+                    namespace, chunk_data = unpack_stream_chunk(chunk)
+                    should_record_transcript = is_top_level_namespace(namespace)
+
+                    if "__interrupt__" in chunk_data:
+                        interrupt_info = chunk_data["__interrupt__"][0].value
                         if is_hitl_interrupt(interrupt_info):
                             print(format_hitl_interrupt(interrupt_info))
                             prompt = "BioInCoder approval> "
@@ -279,7 +344,7 @@ def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> Non
                             if user_answer.lower() in {"/exit", "/quit"}:
                                 print("Exiting.")
                                 return
-                            if not handle_repl_command(user_answer, transcript):
+                            if not handle_repl_command(user_answer, transcript, runtime=multi_agent_runtime):
                                 break
                         transcript.append(
                             "user",
@@ -290,9 +355,12 @@ def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> Non
                         interrupted = True
                         break
 
-                    for update in chunk["data"].values():
+                    for update in chunk_data.values():
                         if update is not None:
-                            print_message_update(update, transcript=transcript)
+                            print_message_update(
+                                update,
+                                transcript=transcript if should_record_transcript else None,
+                            )
 
                 if not interrupted:
                     break

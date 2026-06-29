@@ -69,15 +69,19 @@ BioInCoder also has a unified CLI entry point:
 python3 bioincoder_cli.py run --user-id user1 --session-id literature-task-001
 python3 bioincoder_cli.py skills validate
 python3 bioincoder_cli.py sessions list
-python3 bioincoder_cli.py history --user-id user1 --session-id literature-task-001 --limit 50
+python3 bioincoder_cli.py transcript show --user-id user1 --session-id literature-task-001 --limit 50
+python3 bioincoder_cli.py transcript path --user-id user1 --session-id literature-task-001
+python3 bioincoder_cli.py transcript subagents --user-id user1 --session-id literature-task-001
 ```
 
 The `run` command starts the interactive REPL and requires `DEEPSEEK_API_KEY`.
 Offline maintenance commands such as `skills validate` and `sessions list` do
 not initialize the model runtime.
 
-Inside the REPL, use `/history [n]` to show recent main conversation entries
-and `/transcript` to print the session transcript path.
+Inside the REPL, use `/transcript` or `/transcript show [n]` to show recent
+main conversation entries, `/transcript path` to print the main transcript
+path, `/transcript subagents` to list saved subagent transcripts, and
+`/transcript subagent <channel> <request_id>` to read one subagent transcript.
 
 `session-id` is the restart key. Start BioInCoder again with the same
 `user-id` and `session-id` to continue the same session when SQLite
@@ -91,8 +95,8 @@ Use `/exit` or Ctrl-D to quit.
 Runtime state is stored under `artifacts/` by default:
 
 - `artifacts/checkpoints/bioincoder.sqlite` for LangGraph checkpoints
-- `artifacts/sessions/<user-id>/<session-id>/messages/` for saved subagent transcripts
 - `artifacts/sessions/<user-id>/<session-id>/transcript.jsonl` for the main conversation transcript
+- `artifacts/sessions/<user-id>/<session-id>/subagent_transcripts/` for saved subagent transcripts
 
 Set `BIOINCODER_CHECKPOINTER=memory` to disable persistent checkpoints.
 

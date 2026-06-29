@@ -118,7 +118,7 @@ class MessageContainer:
         return safe or "unnamed"
 
     def requestMsgs_file_path(self, channel_name: str, request_id: str, root_dir: str | Path | None = None) -> Path:
-        root = Path(root_dir or self.config.storage_dir or "artifacts/messages")
+        root = Path(root_dir or self.config.storage_dir or "artifacts/subagent_transcripts")
         filename = f"{self._safe_file_component(channel_name)}__{self._safe_file_component(request_id)}.json"
         return root / filename
 

@@ -13,7 +13,7 @@ from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, 
 from Runtime import MultiAgentRuntime, BioInCoderState
 from jupytercode_tool import JupyterCodeToolkit, JUPYTER_REGISTRY
 from Search_tools import AcademicRestRequest, AcademicSearch
-from Persistence import make_checkpointer, session_messages_dir
+from Persistence import make_checkpointer, session_subagent_transcripts_dir
 from Browser_tools import (
     AgentBrowserCommand,
     AgentBrowserHelp,
@@ -282,5 +282,5 @@ multi_agent_runtime = MultiAgentRuntime(
     jupyter_registry=JUPYTER_REGISTRY,
     user_id=BIOINCODER_USER_ID,
     session_id=BIOINCODER_SESSION_ID,
-    message_storage_dir=session_messages_dir(BIOINCODER_USER_ID, BIOINCODER_SESSION_ID),
+    message_storage_dir=session_subagent_transcripts_dir(BIOINCODER_USER_ID, BIOINCODER_SESSION_ID),
 )

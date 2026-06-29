@@ -24,7 +24,7 @@ class ReadAgentMessages(BaseTool):
     name: str = "read_agent_messages"
     description: str = (
         "Read a saved agent or subagent transcript from MultiAgentRuntime.message_container. "
-        "Use this when a previous tool response says that detailed subagent messages were saved "
+        "Use this when a previous tool response says that a detailed subagent transcript was saved "
         "in a channel/request_id."
     )
     args_schema: type[BaseModel] = ReadAgentMessagesInput
@@ -58,7 +58,7 @@ class ListSavedMessageRefs(BaseTool):
     name: str = "list_saved_message_refs"
     description: str = (
         "List saved message_container channels and request ids. "
-        "Use this before read_agent_messages when you need to find available saved transcripts."
+        "Use this before read_agent_messages when you need to find available subagent transcripts."
     )
     args_schema: type[BaseModel] = ListSavedMessageRefsInput
 

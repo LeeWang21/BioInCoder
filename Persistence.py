@@ -21,8 +21,8 @@ def session_root(user_id: str, session_id: str) -> Path:
     return artifacts_root() / "sessions" / safe_id(user_id, "default_user") / safe_id(session_id, "default_session")
 
 
-def session_messages_dir(user_id: str, session_id: str) -> Path:
-    return session_root(user_id, session_id) / "messages"
+def session_subagent_transcripts_dir(user_id: str, session_id: str) -> Path:
+    return session_root(user_id, session_id) / "subagent_transcripts"
 
 
 def checkpoint_db_path() -> Path:
