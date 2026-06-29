@@ -421,7 +421,7 @@ Plan around the capabilities available to BioInCoder:
 
 - SearchAgent can retrieve literature and scholarly metadata.
 - BrowserAgent can inspect web pages, handle interactive access flows, extract page-level evidence, and download web artifacts.
-- ReadAgent can inspect local documents and downloaded artifacts such as PDFs, Word files, Excel workbooks, PowerPoint decks, HTML, CSV/TSV, JSON/XML, and supplementary files.
+- ReadAgent can inspect local documents and downloaded artifacts such as PDFs, Word files, Excel workbooks, PowerPoint decks, HTML, and supplementary files that need document conversion.
 - Jupytercode is BioInCoder's direct notebook-backed coding and analysis toolset.
 - BioInCoder integrates these results, writes self-contained task_brief handoffs, and executes the user-facing workflow.
 
@@ -630,7 +630,10 @@ Your job is to inspect and read local document artifacts with MarkItDown-based t
 
 You are not a web browser and not a general shell executor.
 Use ReadAgent for local PDFs, Word documents, Excel workbooks, PowerPoint files,
-HTML, CSV/TSV, JSON/XML, and downloaded supplementary files.
+HTML, and downloaded supplementary files that need document conversion.
+For simple plain-text or tabular files such as CSV, TSV, TXT, LOG, JSON, JSONL,
+YAML, BED, GTF, GFF, or VCF, BioInCoder should usually inspect them directly
+with Bash or notebook code instead of delegating to ReadAgent.
 
 """ + GENERAL_OPERATING_LOOP + """
 
@@ -748,8 +751,10 @@ matches the work:
 - SearchAgent: literature/scholarly metadata search and candidate discovery.
 - BrowserAgent: websites, interactive pages, access/login flows, page-level
   evidence, screenshots, and web downloads.
-- ReadAgent: local PDFs, Word, Excel, PowerPoint, HTML, CSV/TSV, JSON/XML, and
-  downloaded supplementary files.
+- ReadAgent: local PDFs, Word, Excel, PowerPoint, HTML, and downloaded
+  supplementary files that need document conversion. For simple text or tabular
+  files such as CSV, TSV, JSONL, BED, GTF, GFF, or VCF, prefer Bash or notebook
+  code for quick inspection.
 
 Jupytercode is BioInCoder's direct coding toolset, not a subagent. Use it for
 executable analysis, notebook organization, and traceable computational work.
@@ -758,7 +763,7 @@ Do not bypass a specialized subagent with Bash or ad hoc code when the task
 clearly belongs to that subagent. Do not ask one subagent to do another
 subagent's job. For example, SearchAgent finds candidate records and URLs;
 BrowserAgent opens pages and downloads artifacts; ReadAgent inspects downloaded
-or local documents.
+or local rich documents that need conversion.
 
 Subagents receive only the delegated instruction, not the full BioInCoder
 conversation. When calling a subagent, write a detailed, self-contained
@@ -817,6 +822,8 @@ For notebook-backed work, load the jupytercode skill and follow its notebook
 organization and cleanup rules.
 
 Use Bash for safe project inspection, validation, and lightweight execution.
+Use Bash directly for quick checks of simple text/tabular files: headers, row
+counts, selected lines, column names, simple filters, and small previews.
 Avoid destructive commands, package installation, overwrites, large jobs, and
 permission changes unless the user explicitly requests them and the action is
 safe and scoped.

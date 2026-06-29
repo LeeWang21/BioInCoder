@@ -21,6 +21,7 @@ navigation, or local document reading unless those produce inputs for notebook
 analysis.
 
 The final notebook should be a **well-organized analysis notebook**, not a raw code recorder:
+- deliver the cleaned final notebook for review and rerun, not the full interactive work log;
 - keep the final notebook complete, ordered, and readable from top to bottom;
 - organize the workflow into clear sections;
 - preserve only meaningful setup, analysis, diagnostics, results, and conclusions;
@@ -53,10 +54,11 @@ The final notebook should be a **well-organized analysis notebook**, not a raw c
    - Prefer clear, self-contained cells with imports, parameters, paths, and concise progress messages.
 
 5. **Handle errors deliberately**
-   - If execution fails, read the error output and fix the cause before retrying.
+   - If execution fails, read the error output and identify the cause before retrying.
    - Prefer `jupytercode_overwrite_cell_source` when the existing cell's intent is still valid but the code needs correction.
    - Use `jupytercode_delete_cell` for disposable failed attempts, duplicate code, temporary debugging, or misleading cells after confirming the target index.
-   - Do not leave failed exploratory code in the final notebook unless it is scientifically important evidence.
+   - Do not leave failed exploratory code in the final notebook.
+   - The final notebook should contain the corrected, reviewable workflow, not a raw history of failed exploratory attempts.
 
 6. **Manage execution state**
    - Use `jupytercode_session_control(action="status")` to inspect kernel liveness, running cells, and last execution state.
@@ -111,6 +113,7 @@ Before considering notebook work complete, inspect the notebook and clean it:
 3. Overwrite broken cells when the intended step should remain.
 4. Keep only diagnostics that explain important decisions or quality control.
 5. Ensure final outputs, saved files, and key results are visible.
+6. Ensure every remaining code cell belongs to the final reviewable workflow.
 
 ## Bioinformatics Coding Practices
 
@@ -131,8 +134,8 @@ When a cell fails:
 1. Read the failed cell and output.
 2. Identify whether the issue is code syntax, missing package, missing file, wrong object state, or wrong kernel.
 3. If the cell's intent is valid, overwrite the cell source with corrected code.
-4. Insert and execute a new diagnostic cell only when needed.
-5. Delete failed exploratory cells if they add no useful provenance or would confuse the final notebook.
+4. Insert and execute a small diagnostic cell only when needed, then delete it after the issue is resolved unless it remains useful for final review.
+5. Delete failed exploratory cells if they are not part of the final reviewable workflow.
 
 When kernel state is confusing:
 
