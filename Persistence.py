@@ -5,6 +5,8 @@ import re
 import sqlite3
 from pathlib import Path
 from typing import Any
+from datetime import datetime
+from uuid import uuid4
 
 
 def safe_id(value: str | None, default: str) -> str:
@@ -23,6 +25,11 @@ def session_root(user_id: str, session_id: str) -> Path:
 
 def session_subagent_transcripts_dir(user_id: str, session_id: str) -> Path:
     return session_root(user_id, session_id) / "subagent_transcripts"
+
+
+def generate_session_id() -> str:
+    timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+    return f"{timestamp}-{uuid4().hex[:4]}"
 
 
 def checkpoint_db_path() -> Path:

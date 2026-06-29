@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from Persistence import artifacts_root
+from Persistence import artifacts_root, generate_session_id
 from Transcript import (
     DEFAULT_HISTORY_LIMIT,
     TranscriptStore,
@@ -19,15 +19,18 @@ from Transcript import (
 def _add_session_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--user-id", default=None, help="BioInCoder user id.")
     parser.add_argument("--session-id", default=None, help="BioInCoder session id.")
-    parser.add_argument(
-        "--thread-id",
-        default=None,
-        help="Advanced: optional sub-thread id under the same session.",
-    )
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
     import os
+
+    user_id = args.user_id or os.environ.get("BIOINCODER_USER_ID")
+    if not user_id:
+        print("BIOINCODER_USER_ID is not set.")
+        print("Run with --user-id <name>, or export BIOINCODER_USER_ID=<name>.")
+        return 1
+
+    session_id = args.session_id or os.environ.get("BIOINCODER_SESSION_ID") or generate_session_id()
 
     if sys.version_info < (3, 10):
         print(
@@ -37,9 +40,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
         return 1
 
-    user_id = args.user_id or os.environ.get("BIOINCODER_USER_ID", "default_user")
-    session_id = args.session_id or os.environ.get("BIOINCODER_SESSION_ID", "default_session")
-
     if not os.environ.get("DEEPSEEK_API_KEY"):
         print("DEEPSEEK_API_KEY is not set.")
         print("Run: export DEEPSEEK_API_KEY='<your-key>'")
@@ -47,7 +47,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     from Run import run_repl
 
-    run_repl(user_id=user_id, session_id=session_id, thread_id=args.thread_id)
+    run_repl(user_id=user_id, session_id=session_id)
     return 0
 
 
@@ -101,33 +101,53 @@ def _cmd_list_sessions(args: argparse.Namespace) -> int:
 def _session_ids_from_args(args: argparse.Namespace) -> tuple[str, str]:
     import os
 
-    user_id = args.user_id or os.environ.get("BIOINCODER_USER_ID", "default_user")
-    session_id = args.session_id or os.environ.get("BIOINCODER_SESSION_ID", "default_session")
+    user_id = args.user_id or os.environ.get("BIOINCODER_USER_ID")
+    if not user_id:
+        raise ValueError("Provide --user-id or set BIOINCODER_USER_ID.")
+    session_id = args.session_id or os.environ.get("BIOINCODER_SESSION_ID")
+    if not session_id:
+        raise ValueError("Provide --session-id or set BIOINCODER_SESSION_ID.")
     return user_id, session_id
 
 
 def _cmd_transcript_show(args: argparse.Namespace) -> int:
-    user_id, session_id = _session_ids_from_args(args)
+    try:
+        user_id, session_id = _session_ids_from_args(args)
+    except ValueError as exc:
+        print(str(exc))
+        return 1
     transcript = TranscriptStore(user_id=user_id, session_id=session_id)
     print(format_entries(transcript.read_recent(args.limit)))
     return 0
 
 
 def _cmd_transcript_path(args: argparse.Namespace) -> int:
-    user_id, session_id = _session_ids_from_args(args)
+    try:
+        user_id, session_id = _session_ids_from_args(args)
+    except ValueError as exc:
+        print(str(exc))
+        return 1
     transcript = TranscriptStore(user_id=user_id, session_id=session_id)
     print(transcript.path)
     return 0
 
 
 def _cmd_transcript_subagents(args: argparse.Namespace) -> int:
-    user_id, session_id = _session_ids_from_args(args)
+    try:
+        user_id, session_id = _session_ids_from_args(args)
+    except ValueError as exc:
+        print(str(exc))
+        return 1
     print(format_subagent_transcript_refs(list_subagent_transcript_refs(user_id, session_id)))
     return 0
 
 
 def _cmd_transcript_subagent(args: argparse.Namespace) -> int:
-    user_id, session_id = _session_ids_from_args(args)
+    try:
+        user_id, session_id = _session_ids_from_args(args)
+    except ValueError as exc:
+        print(str(exc))
+        return 1
     try:
         payload = read_subagent_transcript_payload(
             user_id=user_id,

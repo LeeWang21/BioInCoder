@@ -54,7 +54,7 @@ export BIOINCODER_PYTHON=/path/to/python3.10+
 ## Run
 
 ```bash
-./run_bioincoder.sh
+./run_bioincoder.sh --user-id user1
 ```
 
 Useful options:
@@ -63,9 +63,14 @@ Useful options:
 ./run_bioincoder.sh --user-id user1 --session-id literature-task-001
 ```
 
+`user-id` is required unless `BIOINCODER_USER_ID` is set in the environment.
+If `session-id` is not provided and `BIOINCODER_SESSION_ID` is not set,
+BioInCoder creates a new session id automatically and prints a resume command.
+
 BioInCoder also has a unified CLI entry point:
 
 ```bash
+python3 bioincoder_cli.py run --user-id user1
 python3 bioincoder_cli.py run --user-id user1 --session-id literature-task-001
 python3 bioincoder_cli.py skills validate
 python3 bioincoder_cli.py sessions list
@@ -86,9 +91,6 @@ path, `/transcript subagents` to list saved subagent transcripts, and
 `session-id` is the restart key. Start BioInCoder again with the same
 `user-id` and `session-id` to continue the same session when SQLite
 checkpointing is installed.
-
-Advanced users can pass `--thread-id` to create a sub-thread under the same
-session, but normal use should not need it.
 
 Use `/exit` or Ctrl-D to quit.
 

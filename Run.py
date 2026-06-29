@@ -7,7 +7,7 @@ from typing import Any
 from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 
-from Persistence import graph_thread_id
+from Persistence import generate_session_id, graph_thread_id
 from Transcript import (
     DEFAULT_HISTORY_LIMIT,
     TranscriptStore,
@@ -27,13 +27,8 @@ except ImportError:  # pragma: no cover - runtime fallback for minimal environme
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the BioInCoder CLI.")
-    parser.add_argument("--user-id", default=os.environ.get("BIOINCODER_USER_ID", "default_user"))
-    parser.add_argument("--session-id", default=os.environ.get("BIOINCODER_SESSION_ID", "default_session"))
-    parser.add_argument(
-        "--thread-id",
-        default=os.environ.get("BIOINCODER_THREAD_ID"),
-        help="Advanced: optional sub-thread id. By default, session-id is the restart key.",
-    )
+    parser.add_argument("--user-id", default=os.environ.get("BIOINCODER_USER_ID"))
+    parser.add_argument("--session-id", default=os.environ.get("BIOINCODER_SESSION_ID"))
     return parser.parse_args(argv)
 
 
@@ -291,6 +286,10 @@ def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> Non
         f"(user_id={user_id}, session_id={session_id}, "
         f"checkpoint_thread_id={internal_thread_id})."
     )
+    print(
+        "To resume this session later:\n"
+        f"  python3 bioincoder_cli.py run --user-id {user_id} --session-id {session_id}"
+    )
     print(f"Transcript: {transcript.path}")
     print(f"Previous transcript entries: {transcript.count()}")
     if repl_session is None:
@@ -371,10 +370,15 @@ def run_repl(user_id: str, session_id: str, thread_id: str | None = None) -> Non
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+    if not args.user_id:
+        raise SystemExit(
+            "BIOINCODER_USER_ID is not set.\n"
+            "Run with --user-id <name>, or export BIOINCODER_USER_ID=<name>."
+        )
+    session_id = args.session_id or generate_session_id()
     run_repl(
         user_id=args.user_id,
-        session_id=args.session_id,
-        thread_id=args.thread_id,
+        session_id=session_id,
     )
 
 
