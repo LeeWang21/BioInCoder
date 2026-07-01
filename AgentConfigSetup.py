@@ -9,7 +9,7 @@ from Message_tools import ReadAgentMessages, ListSavedMessageRefs
 from Skill_tool import SkillTool, generate_skill_tool_prompt
 from Todo_tools import SetPlan, UpdateChecklist, AdvanceChecklist
 from LLM import llm, llm_flash
-from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, CODE_REVIEWER_PROMPT, BIOINCODER_PROMPT
+from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, CODE_REVIEW_AGENT_PROMPT, BIOINCODER_PROMPT
 from Runtime import MultiAgentRuntime, BioInCoderState
 from jupytercode_tool import JupyterCodeToolkit, JUPYTER_REGISTRY
 from Search_tools import AcademicRestRequest, AcademicSearch
@@ -115,7 +115,7 @@ agent_registry.register_tool(name="Skill_tool_Planner", tool=SkillTool(agent_nam
 agent_registry.register_tool(name="Skill_tool_Search", tool=SkillTool(agent_name="search"))
 agent_registry.register_tool(name="Skill_tool_Browser", tool=SkillTool(agent_name="browser"))
 agent_registry.register_tool(name="Skill_tool_Read", tool=SkillTool(agent_name="reader"))
-agent_registry.register_tool(name="Skill_tool_CodeReviewer", tool=SkillTool(agent_name="CodeReviewer"))
+agent_registry.register_tool(name="Skill_tool_CodeReviewAgent", tool=SkillTool(agent_name="CodeReviewAgent"))
 agent_registry.register_tool(name="Set_plan", tool=SetPlan())
 agent_registry.register_tool(name="Update_checklist", tool=UpdateChecklist())
 agent_registry.register_tool(name="Advance_checklist", tool=AdvanceChecklist())
@@ -227,25 +227,25 @@ Read_AgentConfig = AgentConfig(
     tool_names=tools_for_read,
 )
 
-#CodeReviewer_AgentConfig
+#CodeReviewAgent_AgentConfig
 tools_for_code_reviewer = [
-    "Skill_tool_CodeReviewer",
+    "Skill_tool_CodeReviewAgent",
     "Read_agent_messages",
     "List_saved_message_refs",
     "Code_review_workspace",
 ]
 
-SKILL_PROMPT_FOR_CODE_REVIEWER = generate_skill_tool_prompt(agent_name="CodeReviewer") if "Skill_tool_CodeReviewer" in tools_for_code_reviewer else ""
+SKILL_PROMPT_FOR_CODE_REVIEW_AGENT = generate_skill_tool_prompt(agent_name="CodeReviewAgent") if "Skill_tool_CodeReviewAgent" in tools_for_code_reviewer else ""
 
-CodeReviewer_AgentConfig = AgentConfig(
-    agent_name="CodeReviewer",
+CodeReviewAgent_AgentConfig = AgentConfig(
+    agent_name="CodeReviewAgent",
     description=(
         "The code review subagent responsible for independent review of notebooks, scripts, "
         "workflow files, reproducibility, and user-intent alignment in BioInCoder system"
     ),
     channel="CodeReview_Channel",
     model=llm,
-    system_prompt=CODE_REVIEWER_PROMPT + SKILL_PROMPT_FOR_CODE_REVIEWER,
+    system_prompt=CODE_REVIEW_AGENT_PROMPT + SKILL_PROMPT_FOR_CODE_REVIEW_AGENT,
     tool_names=tools_for_code_reviewer,
 )
 
@@ -290,7 +290,7 @@ BioInCoder_AgentConfig = AgentConfig(
 )
 
 #register agent
-for config in [BioInCoder_AgentConfig, Plan_AgentConfig, Search_AgentConfig, Browser_AgentConfig, Read_AgentConfig, CodeReviewer_AgentConfig]:
+for config in [BioInCoder_AgentConfig, Plan_AgentConfig, Search_AgentConfig, Browser_AgentConfig, Read_AgentConfig, CodeReviewAgent_AgentConfig]:
     agent_registry.register_agent(config)
 
 

@@ -66,7 +66,7 @@ try:
 except Exception:  # pragma: no cover - handled at notebook execution time
     NotebookRegistry = None  # type: ignore[assignment]
 
-REVIEW_JUPYTER_REGISTRY = NotebookRegistry(user_id="CodeReviewer", session_id="code_review") if NotebookRegistry else None
+REVIEW_JUPYTER_REGISTRY = NotebookRegistry(user_id="CodeReviewAgent", session_id="code_review") if NotebookRegistry else None
 
 
 def _now_review_id() -> str:
@@ -446,7 +446,7 @@ def _review_jupyter_registry(review_id: str):
     if REVIEW_JUPYTER_REGISTRY is None:
         raise RuntimeError("jupytercode_tool.NotebookRegistry is unavailable in this runtime.")
     REVIEW_JUPYTER_REGISTRY.configure(
-        user_id="CodeReviewer",
+        user_id="CodeReviewAgent",
         session_id=review_id,
         overwrite=True,
     )
@@ -800,7 +800,7 @@ class CodeReviewInput(BaseModel):
         ...,
         min_length=80,
         description=(
-            "Detailed, self-contained review brief for CodeReviewer. Include the user goal, what changed "
+            "Detailed, self-contained review brief for CodeReviewAgent. Include the user goal, what changed "
             "or was generated, expected inputs/outputs, runtime constraints, expensive stages/checkpoints, "
             "exact partial-review boundaries if any, review priorities, blocking criteria, and explicit out-of-scope items."
         ),
@@ -826,9 +826,9 @@ class CodeReviewInput(BaseModel):
 class CodeReview(BaseTool):
     name: str = "code_review"
     description: str = (
-        "Call CodeReviewer to independently review generated or modified code, notebooks, scripts, and workflow files. "
+        "Call CodeReviewAgent to independently review generated or modified code, notebooks, scripts, and workflow files. "
         "Use before finalizing non-trivial runnable code deliverables, especially notebooks and bioinformatics analyses. "
-        "CodeReviewer receives only the task_brief and target_paths, so the brief must be detailed and self-contained. "
+        "CodeReviewAgent receives only the task_brief and target_paths, so the brief must be detailed and self-contained. "
         "Reviews are read-only for original files and use isolated review workspaces."
     )
     args_schema: type[BaseModel] = CodeReviewInput
@@ -850,7 +850,7 @@ class CodeReview(BaseTool):
 
             review_instruction = HumanMessage(
                 content=(
-                    "CodeReviewer delegated task.\n\n"
+                    "CodeReviewAgent delegated task.\n\n"
                     f"# Review id\n{review_id}\n\n"
                     f"# Review mode\n{mode}\n\n"
                     f"# Review scope\n{review_scope}\n\n"
@@ -879,11 +879,11 @@ class CodeReview(BaseTool):
             request_id = runtime.tool_call_id
             review_config = multi_agent_runtime.make_child_config(
                 parent_config=getattr(runtime, "config", None),
-                agent_name="CodeReviewer",
+                agent_name="CodeReviewAgent",
                 request_id=request_id,
             )
             review_state, message_ref = multi_agent_runtime.invoke_agent(
-                agent_name="CodeReviewer",
+                agent_name="CodeReviewAgent",
                 graph_input={"messages": [review_instruction]},
                 request_id=request_id,
                 config=review_config,
@@ -908,7 +908,7 @@ class CodeReview(BaseTool):
             return tool_error_command(
                 exc,
                 tool_call_id=runtime.tool_call_id,
-                hint="Check that CodeReviewer is registered and that task_brief is detailed enough for review.",
+                hint="Check that CodeReviewAgent is registered and that task_brief is detailed enough for review.",
             )
         finally:
             if review_id is not None:

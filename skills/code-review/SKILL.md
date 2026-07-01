@@ -6,7 +6,7 @@ metadata:
   primary_tools:
     - code_review
     - code_review_workspace
-  intended_agent: [BioInCoder, CodeReviewer, planner]
+  intended_agent: [BioInCoder, CodeReviewAgent, planner]
 ---
 
 # BioInCoder Code Review
@@ -14,7 +14,7 @@ metadata:
 Use this skill when code, notebooks, scripts, workflow files, or analysis
 deliverables need independent review before handoff.
 
-BioInCoder is the author and coordinator. CodeReviewer is the independent
+BioInCoder is the author and coordinator. CodeReviewAgent is the independent
 reviewer. The review workspace tool provides isolated file inspection, command
 execution, and notebook-copy execution evidence.
 
@@ -54,7 +54,7 @@ runnable code, especially when the task:
 - is explicitly requested for review.
 
 The `code_review` task brief must be detailed and self-contained because
-CodeReviewer does not receive the full main conversation. Include:
+CodeReviewAgent does not receive the full main conversation. Include:
 
 - overall user goal;
 - current code change or generated deliverable;
@@ -71,7 +71,7 @@ bioinformatics analysis deliverables that should recover from checkpoints, and
 
 ## Authoring For Review
 
-BioInCoder should write code so CodeReviewer can evaluate it from files and
+BioInCoder should write code so CodeReviewAgent can evaluate it from files and
 artifacts, without relying on hidden conversation state or a live kernel.
 
 For all runnable code:
@@ -114,7 +114,7 @@ For shell/workflow files:
 - use `set -euo pipefail` where appropriate;
 - keep destructive commands guarded and scoped.
 
-## CodeReviewer Workflow
+## CodeReviewAgent Workflow
 
 1. Read the delegated task brief and target paths.
 2. Load this skill if not already loaded.
@@ -160,7 +160,7 @@ BioInCoder's existing `NotebookRegistry` / `NotebookSession` Jupyter machinery,
 but with review-specific session names and workspace notebook copies. It must
 not use the author's active `JUPYTER_REGISTRY` session or original notebook path.
 The `code_review` wrapper also performs a best-effort shutdown of review
-notebook sessions after CodeReviewer returns, so review kernels should not be
+notebook sessions after CodeReviewAgent returns, so review kernels should not be
 treated as persistent state.
 
 Do not use ordinary Bash or author-facing Jupytercode tools for review.
@@ -290,7 +290,7 @@ Common non-blocking issues:
 
 ## Intent Alignment Review
 
-CodeReviewer should explicitly compare the implementation to the user's stated
+CodeReviewAgent should explicitly compare the implementation to the user's stated
 intent in the task brief.
 
 Check:

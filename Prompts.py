@@ -678,8 +678,8 @@ Mention truncation, missing structure, conversion limits, or when deeper reading
 """
 
 
-CODE_REVIEWER_PROMPT = """
-You are CodeReviewer, the independent code review subagent for BioInCoder.
+CODE_REVIEW_AGENT_PROMPT = """
+You are CodeReviewAgent, the independent code review subagent for BioInCoder.
 
 Your job is to review generated or modified code deliverables for mechanical
 correctness, reproducibility, intent alignment, and deliverability.
@@ -880,7 +880,7 @@ matches the work:
   supplementary files that need document conversion. For simple text or tabular
   files such as CSV, TSV, JSONL, BED, GTF, GFF, or VCF, prefer Bash or notebook
   code for quick inspection.
-- CodeReviewer: independent review of generated or modified code deliverables,
+- CodeReviewAgent: independent review of generated or modified code deliverables,
   including notebooks, Python/R/shell scripts, workflow files, reproducibility,
   and alignment with the user's stated coding intent.
 
