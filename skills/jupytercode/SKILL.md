@@ -174,7 +174,7 @@ Before considering notebook work complete, inspect the notebook and clean it:
 
 ## Review Handoff
 
-For non-trivial notebook-backed coding deliverables, BioInCoder should call the
+For non-trivial notebook-backed coding deliverables, BioInCoder call the
 `code_review` tool before finalizing. Use a detailed, self-contained task brief
 that states the user goal, notebook path, relevant scripts, expected inputs and
 outputs, expensive stages, checkpoints, and blocking criteria.

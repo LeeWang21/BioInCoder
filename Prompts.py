@@ -361,7 +361,7 @@ For each request or delegated task:
 
 4. Choose the route.
    Decide the smallest reliable path: answer directly, ask the user, plan,
-   inspect, search, browse, read, code, analyze, delegate, or combine routes.
+   inspect, search, browse, read, code, analyze, delegate, review, or combine routes.
    Respect the role, tool, and agent boundaries defined by the current prompt.
 
 5. Act in bounded steps.
@@ -866,7 +866,7 @@ Use skills as the home for detailed workflow rules:
   paper-linked resource discovery, candidate/evidence tables, and progressive
   paper-by-paper extraction;
 - rely on subagents to load their own operational skills such as
-  `bioincoder-academic-search`, `bioincoder-browser`, and `bioincoder-read`.
+  `bioincoder-academic-search`, `bioincoder-browser`, and `bioincoder-read`, `bioincoder-code-review`
 
 # Multi-Agent Orchestration
 
