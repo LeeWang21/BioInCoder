@@ -9,10 +9,11 @@ from Message_tools import ReadAgentMessages, ListSavedMessageRefs
 from Skill_tool import SkillTool, generate_skill_tool_prompt
 from Todo_tools import SetPlan, UpdateChecklist, AdvanceChecklist
 from LLM import llm, llm_flash
-from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, BIOINCODER_PROMPT
+from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, CODE_REVIEWER_PROMPT, BIOINCODER_PROMPT
 from Runtime import MultiAgentRuntime, BioInCoderState
 from jupytercode_tool import JupyterCodeToolkit, JUPYTER_REGISTRY
 from Search_tools import AcademicRestRequest, AcademicSearch
+from CodeReview_tools import CodeReview, CodeReviewWorkspace
 from Persistence import make_checkpointer, session_subagent_transcripts_dir
 from Browser_tools import (
     AgentBrowserCommand,
@@ -114,6 +115,7 @@ agent_registry.register_tool(name="Skill_tool_Planner", tool=SkillTool(agent_nam
 agent_registry.register_tool(name="Skill_tool_Search", tool=SkillTool(agent_name="search"))
 agent_registry.register_tool(name="Skill_tool_Browser", tool=SkillTool(agent_name="browser"))
 agent_registry.register_tool(name="Skill_tool_Read", tool=SkillTool(agent_name="reader"))
+agent_registry.register_tool(name="Skill_tool_CodeReviewer", tool=SkillTool(agent_name="CodeReviewer"))
 agent_registry.register_tool(name="Set_plan", tool=SetPlan())
 agent_registry.register_tool(name="Update_checklist", tool=UpdateChecklist())
 agent_registry.register_tool(name="Advance_checklist", tool=AdvanceChecklist())
@@ -121,6 +123,8 @@ agent_registry.register_tool(name="Read_agent_messages", tool=ReadAgentMessages(
 agent_registry.register_tool(name="List_saved_message_refs", tool=ListSavedMessageRefs())
 agent_registry.register_tool(name="Academic_rest_request", tool=AcademicRestRequest())
 agent_registry.register_tool(name="Academic_search", tool=AcademicSearch())
+agent_registry.register_tool(name="Code_review", tool=CodeReview())
+agent_registry.register_tool(name="Code_review_workspace", tool=CodeReviewWorkspace())
 agent_registry.register_tool(name="Agent_browser_command", tool=AgentBrowserCommand())
 agent_registry.register_tool(name="Agent_browser_help", tool=AgentBrowserHelp())
 agent_registry.register_tool(name="Cloakbrowser_config", tool=CloakBrowserConfig())
@@ -223,6 +227,28 @@ Read_AgentConfig = AgentConfig(
     tool_names=tools_for_read,
 )
 
+#CodeReviewer_AgentConfig
+tools_for_code_reviewer = [
+    "Skill_tool_CodeReviewer",
+    "Read_agent_messages",
+    "List_saved_message_refs",
+    "Code_review_workspace",
+]
+
+SKILL_PROMPT_FOR_CODE_REVIEWER = generate_skill_tool_prompt(agent_name="CodeReviewer") if "Skill_tool_CodeReviewer" in tools_for_code_reviewer else ""
+
+CodeReviewer_AgentConfig = AgentConfig(
+    agent_name="CodeReviewer",
+    description=(
+        "The code review subagent responsible for independent review of notebooks, scripts, "
+        "workflow files, reproducibility, and user-intent alignment in BioInCoder system"
+    ),
+    channel="CodeReview_Channel",
+    model=llm,
+    system_prompt=CODE_REVIEWER_PROMPT + SKILL_PROMPT_FOR_CODE_REVIEWER,
+    tool_names=tools_for_code_reviewer,
+)
+
 #BioInCoder_AgentConfig
 tools_for_Coder = [
     "Ask_user_tool",
@@ -233,6 +259,7 @@ tools_for_Coder = [
     "Academic_search",
     "Browser_browse",
     "Read_artifact",
+    "Code_review",
     "Set_plan",
     "Update_checklist",
     "Advance_checklist",
@@ -263,7 +290,7 @@ BioInCoder_AgentConfig = AgentConfig(
 )
 
 #register agent
-for config in [BioInCoder_AgentConfig, Plan_AgentConfig, Search_AgentConfig, Browser_AgentConfig, Read_AgentConfig]:
+for config in [BioInCoder_AgentConfig, Plan_AgentConfig, Search_AgentConfig, Browser_AgentConfig, Read_AgentConfig, CodeReviewer_AgentConfig]:
     agent_registry.register_agent(config)
 
 

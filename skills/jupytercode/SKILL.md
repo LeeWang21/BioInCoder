@@ -106,6 +106,59 @@ Keep the final notebook useful for later inspection and execution:
 - Delete or overwrite failed code cells that are not useful for the final narrative.
 - Do not delete cells that contain important provenance, results, user-authored content, or scientifically meaningful diagnostics.
 
+## Reviewable Notebook Authoring Protocol
+
+When BioInCoder writes notebook-backed analysis code, write for later review
+from the beginning. The final notebook should not depend on the author's live
+kernel memory or unstated conversational context.
+
+Use this structure for non-trivial analysis notebooks:
+
+1. Project setup and parameters
+   - Define `PROJECT_ROOT`, `INPUT_DIR`, `OUTPUT_DIR`, `FIGURE_DIR`,
+     `TABLE_DIR`, and `CACHE_DIR` near the top.
+   - Create output/cache directories explicitly.
+   - Define major analysis parameters and random seeds in visible cells.
+   - Print package versions when package behavior affects results.
+
+2. Input inventory and validation
+   - Check that required input files/directories exist before loading.
+   - Print detected files, shapes, sample IDs, metadata columns, and key
+     assumptions.
+   - Fail clearly if required inputs are missing instead of silently using
+     fallback files.
+
+3. Stage-based workflow
+   - Organize major work into markdown sections such as setup, load data,
+     preprocessing, expensive compute, downstream analysis, visualization, and
+     export.
+   - Keep each code cell focused on one reviewable step.
+   - Avoid relying on variables created only by temporary/debug cells.
+
+4. Checkpoints for expensive stages
+   - Save expensive intermediate objects to explicit paths, for example under
+     `artifacts/cache/`.
+   - At downstream stage starts, load from checkpoint or clearly require the
+     upstream stage to be run.
+   - Print checkpoint paths and object dimensions after writing/loading.
+
+5. Output contract
+   - Save requested tables, figures, models, logs, and summary files to explicit
+     paths.
+   - Show a short final output inventory listing saved files.
+   - Do not treat displayed notebook output as a substitute for requested saved
+     artifacts.
+
+6. Final cleanup
+   - Remove scratch cells, failed attempts, duplicate cells, and misleading
+     outputs.
+   - Keep only diagnostics that explain important analysis decisions.
+   - Ensure notebook text and code describe the same workflow.
+
+For partial notebook edits, make the edited section reviewable on its own:
+state its required inputs, load needed checkpoints if appropriate, and save or
+display its outputs explicitly.
+
 Before considering notebook work complete, inspect the notebook and clean it:
 
 1. Confirm the notebook reads as a coherent workflow from top to bottom.
@@ -114,6 +167,21 @@ Before considering notebook work complete, inspect the notebook and clean it:
 4. Keep only diagnostics that explain important decisions or quality control.
 5. Ensure final outputs, saved files, and key results are visible.
 6. Ensure every remaining code cell belongs to the final reviewable workflow.
+
+## Review Handoff
+
+For non-trivial notebook-backed coding deliverables, BioInCoder should call the
+`code_review` tool before finalizing. Use a detailed, self-contained task brief
+that states the user goal, notebook path, relevant scripts, expected inputs and
+outputs, expensive stages, checkpoints, and blocking criteria.
+
+Default to `mode="resume"` for notebook analysis deliverables when expensive
+stages can resume from cache/checkpoint artifacts. Use `mode="fast"` for small
+localized notebook edits. Use `mode="full"` only when full clean execution is
+feasible or explicitly requested.
+
+Code review must not mutate the original notebook or active kernel state. The
+reviewer should use read-only checks or isolated review workspaces.
 
 ## Bioinformatics Coding Practices
 
