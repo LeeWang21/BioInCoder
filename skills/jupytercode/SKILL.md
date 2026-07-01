@@ -32,6 +32,9 @@ The final notebook should be a **well-organized analysis notebook**, not a raw c
 ## Core Workflow
 
 1. **Choose a kernel**
+   - When opening an existing `.ipynb`, first use `jupytercode_inspect_notebook_metadata` to inspect `metadata.kernelspec.name` without starting a kernel.
+   - Prefer the notebook-recorded `metadata.kernelspec.name` for reproducibility unless the user explicitly wants to migrate the notebook to another kernel.
+   - If the recorded kernel is unavailable, report that clearly and ask before switching kernels.
    - If the user did not specify a kernel, use `jupytercode_kernel_selection` guidance.
    - Ask the user to choose or confirm the kernel when no kernel is specified or multiple suitable kernels are available.
    - Match code language to kernel language: Python code to Python kernel, R code to R kernel.
@@ -72,6 +75,7 @@ Use these tools as the main Jupytercode surface:
 
 - `jupytercode_kernel_selection`: decide which kernel is appropriate.
 - `jupytercode_notebooks_info`: list currently registered notebook sessions.
+- `jupytercode_inspect_notebook_metadata`: inspect an existing notebook's kernelspec and language metadata without opening a kernel.
 - `jupytercode_use_notebook`: open/create a notebook session.
 - `jupytercode_read_notebook`: inspect notebook structure and cell previews.
 - `jupytercode_read_cell`: inspect one cell in full.

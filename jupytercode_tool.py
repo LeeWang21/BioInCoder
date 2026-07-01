@@ -59,6 +59,24 @@ def error_response(error: Exception | str, error_type: str | None = None, hint: 
     return out
 
 
+def notebook_metadata_summary(notebook_path: str) -> dict[str, Any]:
+    path = Path(notebook_path).resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"Notebook does not exist: {path}")
+    nb = nbf.read(path, as_version=4)
+    metadata = nb.get("metadata", {}) or {}
+    kernelspec = metadata.get("kernelspec", {}) or {}
+    language_info = metadata.get("language_info", {}) or {}
+    return {
+        "notebook_path": str(path),
+        "metadata_kernel_name": kernelspec.get("name"),
+        "metadata_kernel_display_name": kernelspec.get("display_name"),
+        "metadata_kernel_language": kernelspec.get("language"),
+        "language_info_name": language_info.get("name"),
+        "language_info_version": language_info.get("version"),
+    }
+
+
 # -----------------------------------------------------------------------------
 # NotebookSession + kernel state
 # -----------------------------------------------------------------------------
@@ -136,10 +154,17 @@ class NotebookSession:
 
     def status(self) -> dict[str, Any]:
         is_alive = bool(self.km and self.km.is_alive())
+        metadata = notebook_metadata_summary(str(self.path)) if self.path.exists() else {}
         return ok_response(
             notebook_name=self.name,
             notebook_path=str(self.path),
             kernel_name=self.kernel_name,
+            notebook_metadata=metadata,
+            kernel_matches_notebook_metadata=(
+                metadata.get("metadata_kernel_name") in {None, self.kernel_name}
+                if metadata
+                else None
+            ),
             kernel_alive=is_alive,
             user_id=self.user_id,
             session_id=self.session_id,
@@ -159,6 +184,7 @@ class NotebookSession:
         # Reload from disk to pick up user edits
         if self.path.exists():
             self.nb = nbf.read(self.path, as_version=4)
+        metadata = notebook_metadata_summary(str(self.path)) if self.path.exists() else {}
         cells = []
         for i, cell in enumerate(self.nb.cells):
             cells.append({
@@ -172,6 +198,12 @@ class NotebookSession:
             "notebook_name": self.name,
             "notebook_path": str(self.path),
             "kernel_name": self.kernel_name,
+            "notebook_metadata": metadata,
+            "kernel_matches_notebook_metadata": (
+                metadata.get("metadata_kernel_name") in {None, self.kernel_name}
+                if metadata
+                else None
+            ),
             "user_id": self.user_id,
             "session_id": self.session_id,
             "num_cells": len(self.nb.cells),
@@ -724,6 +756,20 @@ def jupytercode_notebooks_info() -> str:
     return "\n".join(lines)
 
 @tool
+def jupytercode_inspect_notebook_metadata(notebook_path: str) -> dict[str, Any]:
+    """
+    Inspect an existing notebook's metadata without opening a Jupyter kernel.
+
+    Use before jupytercode_use_notebook when opening an existing .ipynb. The
+    metadata.kernelspec.name records the kernel originally associated with the
+    notebook and should normally be preferred for reproducibility.
+    """
+    try:
+        return ok_response(**notebook_metadata_summary(notebook_path))
+    except Exception as exc:
+        return error_response(exc, hint="Provide a valid existing .ipynb path.")
+
+@tool
 def jupytercode_use_notebook(name: str, notebook_path: str, kernel_name: str) -> dict[str, Any]:
     """
     Open or create a named notebook session with a live Jupyter kernel.
@@ -733,15 +779,28 @@ def jupytercode_use_notebook(name: str, notebook_path: str, kernel_name: str) ->
     Returns ok, notebook_name, notebook_path, notebook_kernel, user_id, session_id, num_cells.
     """
     try:
+        metadata = notebook_metadata_summary(notebook_path) if Path(notebook_path).exists() else {}
         notebook = JUPYTER_REGISTRY.use_notebook(name, notebook_path, kernel_name)
-        return ok_response(
+        out = ok_response(
             notebook_name=name,
             notebook_path=str(notebook.path),
             notebook_kernel=kernel_name,
+            notebook_metadata=metadata,
+            kernel_matches_notebook_metadata=(
+                metadata.get("metadata_kernel_name") in {None, kernel_name}
+                if metadata
+                else None
+            ),
             user_id=notebook.user_id,
             session_id=notebook.session_id,
             num_cells=len(notebook.nb.cells),
         )
+        if metadata and metadata.get("metadata_kernel_name") not in {None, kernel_name}:
+            out["warning"] = (
+                "The requested kernel does not match notebook metadata.kernelspec.name. "
+                "For reproducibility, prefer the notebook-recorded kernel unless intentionally changing it."
+            )
+        return out
     except Exception as exc:
         return error_response(exc, hint="Use a unique notebook name, or shut down the existing session first.")
 
@@ -885,6 +944,7 @@ class JupyterCodeToolkit(BaseToolkit):
         return [
             jupytercode_kernel_selection,
             jupytercode_notebooks_info,
+            jupytercode_inspect_notebook_metadata,
             jupytercode_use_notebook,
             jupytercode_read_notebook,
             jupytercode_read_cell,
