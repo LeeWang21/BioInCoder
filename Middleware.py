@@ -13,7 +13,7 @@ from langchain.agents.middleware import (
 )
 from langchain.tools.tool_node import ToolCallRequest
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import interrupt
 from langgraph.runtime import Runtime
 from Shell_approval_rules import normalize_shell_command, shell_approval_reason
@@ -59,6 +59,8 @@ class PlanOutput(TypedDict, total = False):
     plan_required: bool
     overview: str
     checklist: list[PlanChecklistStep]
+    revision_requested: bool
+    revision_comment: str
 
 class PlanState(TypedDict, total = False):
     plan: PlanOutput
@@ -94,6 +96,49 @@ class StorePlanOutputMiddleware(AgentMiddleware):
                 "checklist": out_dict["checklist"]
             }
         }
+
+
+def _last_ai_tool_names(state: AgentState) -> list[str]:
+    messages = list(state.get("messages", []) or [])
+    for message in reversed(messages):
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls:
+            names = []
+            for call in tool_calls:
+                if isinstance(call, dict):
+                    names.append(str(call.get("name", "")))
+                else:
+                    names.append(str(getattr(call, "name", "")))
+            return names
+        if isinstance(message, AIMessage):
+            return []
+    return []
+
+
+@after_model(can_jump_to=["model"])
+def enforce_plan_revision(state: AgentState, runtime: Runtime):
+    plan = state.get("plan", {})
+    if not plan.get("revision_requested", False):
+        return None
+
+    tool_names = {name.lower() for name in _last_ai_tool_names(state)}
+    if "set_plan" in tool_names:
+        return None
+
+    comment = plan.get("revision_comment", "")
+    return {
+        "messages": [
+            HumanMessage(
+                content=(
+                    "The user commented on the proposed plan, so the plan must be revised before execution continues. "
+                    "Your next action must be to call `set_plan` with an updated overview and checklist that address the comment. "
+                    "Do not continue the task, call other execution tools, or provide a final answer until the revised plan is proposed.\n\n"
+                    f"User plan comment: {comment}"
+                )
+            )
+        ],
+        "jump_to": "model",
+    }
     
 
 @after_agent(can_jump_to=["model"])

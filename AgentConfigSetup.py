@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field 
 
 from AgentConfig import AgentConfig, AgentRegistry
-from Middleware import check_plan, shell_approval, StorePlanOutputMiddleware
+from Middleware import check_plan, enforce_plan_revision, shell_approval, StorePlanOutputMiddleware
 from Ask_user_tool import AskUserTool
 from Message_tools import ReadAgentMessages, ListSavedMessageRefs
 from Skill_tool import SkillTool, generate_skill_tool_prompt
@@ -142,6 +142,7 @@ for tool in JupyterCodeToolkit().get_tools():
 
 #register_middleware
 agent_registry.register_middleware(name="check_plan", middleware=check_plan)
+agent_registry.register_middleware(name="enforce_plan_revision", middleware=enforce_plan_revision)
 agent_registry.register_middleware(name="shell_approval", middleware=shell_approval)
 agent_registry.register_middleware(name="store_plan", middleware=StorePlanOutputMiddleware())
 
@@ -284,7 +285,7 @@ BioInCoder_AgentConfig = AgentConfig(
     model = llm,
     system_prompt = BIOINCODER_PROMPT + SKILL_PROMPT_FOR_CODER,
     tool_names = tools_for_Coder,
-    middleware_names = ["shell_approval"],
+    middleware_names = ["enforce_plan_revision", "shell_approval"],
     state_schema = BioInCoderState,
     checkpointer = ckpt
 )

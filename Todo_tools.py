@@ -182,6 +182,7 @@ class SetPlan(BaseTool):
                 "plan_required": plan_required,
                 "overview": overview,
                 "checklist": checklist,
+                "revision_requested": False,
             }
             plan_context = _format_plan(plan)
 
@@ -233,6 +234,7 @@ class SetPlan(BaseTool):
                         "plan": {
                             **plan,
                             "plan_required": False,
+                            "revision_requested": False,
                         },
                         "messages": [
                             ToolMessage(
@@ -245,6 +247,11 @@ class SetPlan(BaseTool):
 
             return Command(
                 update={
+                    "plan": {
+                        **plan,
+                        "revision_requested": True,
+                        "revision_comment": comment,
+                    },
                     "messages": [
                         ToolMessage(
                             content=(

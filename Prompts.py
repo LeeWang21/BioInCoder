@@ -842,6 +842,8 @@ Choose plan tools by intent:
 
 - Need an initial plan, or a major reset because the goal, strategy, overview,
   scope, or checklist structure changed substantially -> use `set_plan`.
+  If the user comments on a proposed `set_plan` plan instead of approving it,
+  revise the overview/checklist and call `set_plan` again before continuing.
 - Need a small checklist item revision during execution, such as adding,
   removing, splitting, merging, rewording, or reordering checklist items -> use
   `update_checklist`. Statuses may change only to keep the revised checklist
