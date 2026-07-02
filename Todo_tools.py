@@ -1,7 +1,7 @@
 from typing import Type, Literal
 from pydantic import BaseModel, Field, ConfigDict
 from langchain.tools import BaseTool, ToolRuntime 
-from langchain.messages import ToolMessage
+from langchain.messages import HumanMessage, ToolMessage
 
 from langgraph.types import Command, interrupt
 from Tool_utils import is_graph_interrupt, tool_error_command
@@ -182,7 +182,6 @@ class SetPlan(BaseTool):
                 "plan_required": plan_required,
                 "overview": overview,
                 "checklist": checklist,
-                "revision_requested": False,
             }
             plan_context = _format_plan(plan)
 
@@ -234,7 +233,6 @@ class SetPlan(BaseTool):
                         "plan": {
                             **plan,
                             "plan_required": False,
-                            "revision_requested": False,
                         },
                         "messages": [
                             ToolMessage(
@@ -247,11 +245,6 @@ class SetPlan(BaseTool):
 
             return Command(
                 update={
-                    "plan": {
-                        **plan,
-                        "revision_requested": True,
-                        "revision_comment": comment,
-                    },
                     "messages": [
                         ToolMessage(
                             content=(
@@ -261,6 +254,13 @@ class SetPlan(BaseTool):
                                 f"# User comment\n{comment}"
                             ),
                             tool_call_id=runtime.tool_call_id,
+                        ),
+                        HumanMessage(
+                            content=(
+                                "PLAN_REVISION_REQUIRED\n"
+                                "The previous proposed plan was not approved by the user. "
+                                "You must revise the plan according to the user's comment and call `set_plan` again as your next action. "                                f"User plan comment: {comment}"
+                            )
                         )
                     ]
                 }
