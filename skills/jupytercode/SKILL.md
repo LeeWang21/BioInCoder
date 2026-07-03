@@ -63,7 +63,14 @@ The final notebook should be a **well-organized analysis notebook**, not a raw c
    - Do not leave failed exploratory code in the final notebook.
    - The final notebook should contain the corrected, reviewable workflow, not a raw history of failed exploratory attempts.
 
-6. **Manage execution state**
+6. **Inspect and review before delivery**
+   - After each round of notebook edits, read through the notebook from top to bottom and check its organization, narrative flow, code order, outputs, and cleanup state.
+   - Confirm the final notebook is coherent as a standalone deliverable, not just a sequence of successful tool calls.
+   - For non-trivial notebook code, call the independent `code_review` tool before final delivery.
+   - Treat code review findings as required feedback: revise the notebook, inspect it again from top to bottom, and repeat code review until the review passes or any remaining issue is explicitly documented as blocked or out of scope.
+   - Deliver the final notebook only after the notebook organization and code have passed this review loop.
+
+7. **Manage execution state**
    - Use `jupytercode_session_control(action="status")` to inspect kernel liveness, running cells, and last execution state.
    - Use `action="interrupt"` for code that is clearly stuck or no longer needed.
    - Use `action="restart"` only when kernel state is corrupted or a clean state is required.
