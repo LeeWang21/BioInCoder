@@ -427,7 +427,8 @@ class ReadArtifact(BaseTool):
     name: str = "read_artifact"
     description: str = (
         "Call ReadAgent to inspect and read a local document artifact. "
-        "Use for PDFs, Word, Excel, PowerPoint, HTML, CSV/TSV, JSON/XML, and downloaded supplementary files. "
+        "Use for local PDFs, Word, Excel, PowerPoint, HTML, and downloaded supplementary files that need document conversion."
+        "For simple text, script, tabula files such as CSV, TSV, JSONL, BED, GTF, GFF, or VCF, prefer Bash or notebook code for quick inspection."
         "The full ReadAgent trace is saved in Read_Channel."
     )
     args_schema: type[BaseModel] = ReadArtifactInput
