@@ -143,6 +143,10 @@ coverage goal and to explain whether coverage was constrained by query
 specificity, source coverage, deduplication, relevance filtering, or source
 behavior.
 
+For broad or complete candidate retrieval, ask SearchAgent to save raw academic
+API responses and use `search_raw_read` when compact previews are truncated or
+insufficient for the candidate table.
+
 ### Multi-Round Search Strategy
 
 For broad mining, SearchAgent should use a search matrix instead of one query.
@@ -627,6 +631,9 @@ Do not open webpages, download files, or read local artifacts.
 Return search_rounds plus a complete Search candidate table with candidate_id,
 title, year, journal_or_source, PMID, PMCID, DOI, URL,
 sources, search_reason, and search_notes.
+Report raw_output_path/record_path when raw API responses were saved, and note
+whether `search_raw_read` was needed to resolve truncated or incomplete
+previews.
 Do not assign final priority labels. Do not make final inclusion/exclusion
 decisions unless a record is obviously unrelated; note uncertainty in
 search_notes.
