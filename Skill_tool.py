@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 """
 Skill Tool - executes skills within the conversation.
 
@@ -7,10 +9,82 @@ This tool allows agent to invoke skills that provide specialized knowledge
 and workflows for specific tasks.
 """
 
+import subprocess
+import sys
+from pathlib import Path
 from typing import Any, Dict, Optional
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field, PrivateAttr
 from Tool_utils import tool_error_response
+
+
+TEXT_RESOURCE_SUFFIXES = {
+    ".md",
+    ".txt",
+    ".py",
+    ".r",
+    ".R",
+    ".sh",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".csv",
+    ".tsv",
+}
+
+RUNNABLE_SCRIPT_SUFFIXES = {".py", ".R", ".r", ".sh"}
+RUNNABLE_SCRIPT_DIRS = {"scripts", "examples"}
+
+
+def _resource_type(relative_path: Path) -> str:
+    first = relative_path.parts[0] if relative_path.parts else ""
+    if first in {"references", "reference"} or relative_path.name == "usage-guide.md":
+        return "reference"
+    if first == "scripts":
+        return "script"
+    if first == "examples":
+        return "example"
+    if first == "assets":
+        return "asset"
+    return "resource"
+
+
+def _skill_resources(skill_path: Path) -> list[dict[str, Any]]:
+    resources: list[dict[str, Any]] = []
+    for path in sorted(skill_path.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(skill_path)
+        if path.name == "SKILL.md":
+            continue
+        if any(part.startswith(".") or part == "__pycache__" for part in relative.parts):
+            continue
+        resources.append(
+            {
+                "relative_path": relative.as_posix(),
+                "type": _resource_type(relative),
+                "size_bytes": path.stat().st_size,
+                "suffix": path.suffix,
+            }
+        )
+    return resources
+
+
+def _resolve_skill_resource_path(skill_path: Path, relative_path: str) -> Path:
+    if not relative_path or not isinstance(relative_path, str):
+        raise ValueError("`relative_path` must be a non-empty string.")
+    relative = Path(relative_path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError("`relative_path` must stay inside the skill directory.")
+
+    root = skill_path.resolve()
+    candidate = (root / relative).resolve()
+    if root not in candidate.parents and candidate != root:
+        raise ValueError("`relative_path` must stay inside the skill directory.")
+    if not candidate.exists() or not candidate.is_file():
+        raise ValueError(f"Resource does not exist: {relative_path}")
+    return candidate
 
 
 class SkillToolInput(BaseModel):
@@ -131,6 +205,7 @@ Important:
             "skill_description": skill_obj.description,
             "skill_location": skill_obj.location,
             "skill_path": str(skill_obj.path),  # Absolute path for resolving relative resources
+            "resources": _skill_resources(skill_obj.path),
             "prompt": prompt,
             "message": f'The "{skill_obj.name}" skill is loading',
             "allowed_tools": skill_obj.allowed_tools,
@@ -205,7 +280,9 @@ How to use skills:
 - Invoke skills using this tool with the skill name only (no arguments)
 - When you invoke a skill, you will see <command-message>The "{{name}}" skill is loading</command-message>
 - The skill's prompt will expand and provide detailed instructions on how to complete the task
-- Base directory provided in output for resolving bundled resources (references/, scripts/, assets/)
+- The output includes a `resources` index listing bundled files such as references/, scripts/, examples/, and assets/
+- Use `read_skill_resource` to read listed resources when the SKILL.md points to them or more detail is needed
+- Use `run_skill_script` only for listed scripts/examples that must be executed for the task
 
 Important:
 - Only use skills listed in <available_skills> below
@@ -216,3 +293,156 @@ Important:
 {skills_xml}
 </available_skills>
 """
+
+
+class ReadSkillResourceInput(BaseModel):
+    skill: str = Field(description="The skill name whose bundled resource should be read.")
+    relative_path: str = Field(description="Relative path inside the skill directory, as listed in SkillTool resources.")
+
+
+class ReadSkillResource(BaseTool):
+    name: str = "read_skill_resource"
+    description: str = (
+        "Read the full text of a bundled skill resource such as usage-guide.md, "
+        "references/*.md, scripts/*.py, or examples/*.R. Only reads files inside "
+        "the requested skill directory."
+    )
+    args_schema: type[BaseModel] = ReadSkillResourceInput
+    _registry: Any = PrivateAttr(default=None)
+    _agent_name: Optional[str] = PrivateAttr(default=None)
+
+    def __init__(self, agent_name: Optional[str] = None, **kwargs):
+        super().__init__(**kwargs)
+        self._registry = None
+        self._agent_name = agent_name
+
+    @property
+    def registry(self):
+        if self._registry is None:
+            from Skill_loader import load_skills
+            self._registry = load_skills()
+        return self._registry
+
+    def _run(self, skill: str, relative_path: str) -> Dict[str, Any]:
+        try:
+            skill_obj = self.registry.get(skill)
+            if skill_obj is None:
+                return tool_error_response(f"Unknown skill: {skill}")
+            if not skill_obj.is_available_to(self._agent_name):
+                return tool_error_response(f"Skill is not available to this agent: {skill}")
+
+            path = _resolve_skill_resource_path(skill_obj.path, relative_path)
+            if path.suffix not in TEXT_RESOURCE_SUFFIXES:
+                raise ValueError(f"Unsupported resource file type: {path.suffix}")
+
+            text = path.read_text(encoding="utf-8", errors="replace")
+            return {
+                "ok": True,
+                "skill": skill_obj.name,
+                "relative_path": Path(relative_path).as_posix(),
+                "path": str(path),
+                "size_bytes": path.stat().st_size,
+                "chars": len(text),
+                "text": text,
+            }
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint="Check that the skill is available and relative_path is a listed text resource inside the skill directory.",
+            )
+
+
+class RunSkillScriptInput(BaseModel):
+    skill: str = Field(description="The skill name whose bundled script should be run.")
+    relative_path: str = Field(description="Relative path inside scripts/ or examples/ under the skill directory.")
+    args: list[str] = Field(default_factory=list, description="Command arguments passed to the script. Do not include the interpreter.")
+    timeout_seconds: int = Field(default=120, description="Execution timeout in seconds. Capped at 600.")
+
+
+class RunSkillScript(BaseTool):
+    name: str = "run_skill_script"
+    description: str = (
+        "Run a bundled skill script from scripts/ or examples/ with a constrained argument list. "
+        "Supports .py, .R, and .sh files. This is not a general shell: pass args as a JSON list."
+    )
+    args_schema: type[BaseModel] = RunSkillScriptInput
+    _registry: Any = PrivateAttr(default=None)
+    _agent_name: Optional[str] = PrivateAttr(default=None)
+
+    def __init__(self, agent_name: Optional[str] = None, **kwargs):
+        super().__init__(**kwargs)
+        self._registry = None
+        self._agent_name = agent_name
+
+    @property
+    def registry(self):
+        if self._registry is None:
+            from Skill_loader import load_skills
+            self._registry = load_skills()
+        return self._registry
+
+    def _run(
+        self,
+        skill: str,
+        relative_path: str,
+        args: list[str] | None = None,
+        timeout_seconds: int = 120,
+    ) -> Dict[str, Any]:
+        try:
+            skill_obj = self.registry.get(skill)
+            if skill_obj is None:
+                return tool_error_response(f"Unknown skill: {skill}")
+            if not skill_obj.is_available_to(self._agent_name):
+                return tool_error_response(f"Skill is not available to this agent: {skill}")
+
+            path = _resolve_skill_resource_path(skill_obj.path, relative_path)
+            relative = path.relative_to(skill_obj.path)
+            if not relative.parts or relative.parts[0] not in RUNNABLE_SCRIPT_DIRS:
+                raise ValueError("Only scripts under scripts/ or examples/ may be run.")
+            if path.suffix not in RUNNABLE_SCRIPT_SUFFIXES:
+                raise ValueError(f"Unsupported script file type: {path.suffix}")
+
+            if args is None:
+                args = []
+            if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+                raise ValueError("`args` must be a list of strings.")
+            if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or timeout_seconds <= 0:
+                raise ValueError("`timeout_seconds` must be a positive integer.")
+            timeout_seconds = min(timeout_seconds, 600)
+
+            if path.suffix == ".py":
+                command = [sys.executable, str(path), *args]
+            elif path.suffix in {".R", ".r"}:
+                command = ["Rscript", str(path), *args]
+            else:
+                command = ["bash", str(path), *args]
+
+            completed = subprocess.run(
+                command,
+                cwd=str(skill_obj.path),
+                text=True,
+                capture_output=True,
+                timeout=timeout_seconds,
+                check=False,
+            )
+            return {
+                "ok": completed.returncode == 0,
+                "skill": skill_obj.name,
+                "relative_path": relative.as_posix(),
+                "command": command,
+                "cwd": str(skill_obj.path),
+                "exit_code": completed.returncode,
+                "stdout": completed.stdout,
+                "stderr": completed.stderr,
+            }
+        except subprocess.TimeoutExpired as exc:
+            return tool_error_response(
+                f"Timed out after {timeout_seconds} seconds",
+                error_type="TimeoutExpired",
+                hint=f"stdout: {exc.stdout or ''}\nstderr: {exc.stderr or ''}",
+            )
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint="Check skill, relative_path, args, script interpreter availability, and timeout_seconds.",
+            )

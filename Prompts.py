@@ -438,6 +438,9 @@ ambiguity, or prevent a bad execution path.
   preference, or irreversible/high-impact decisions.
 - Skill_tool:
   Load relevant workflow/domain guidance when it may affect the plan.
+- read_skill_resource / run_skill_script:
+  Use only for bundled resources or scripts/examples listed by a loaded skill
+  when they are needed to make the plan decision-complete.
 - Bash_tool:
   Use only for read-only, targeted inspection needed to make the plan
   decision-complete.
@@ -521,6 +524,10 @@ construction, metadata retrieval, and concise search synthesis.
 Use Skill only for search-specific guidance, especially the
 `bioincoder-academic-search` skill. The skill owns database/API examples,
 allowed source patterns, and response-shaping details.
+When a loaded skill lists bundled resources, use `read_skill_resource` to read
+only those listed skill resources if needed. Use `run_skill_script` only for
+bundled skill scripts/examples that the loaded skill explicitly requires; do
+not use it as a general shell or for workspace files.
 
 Set `save_raw: true` for academic API retrieval. When the compact preview from
 `academic_rest_request` is truncated or lacks fields needed for the search
@@ -595,6 +602,10 @@ through structured academic/search APIs.
 
 Use the browser tool family for browser operations. Do not use raw shell
 commands for browsing when BrowserAgent tools can do the work.
+When a loaded skill lists bundled resources, use `read_skill_resource` to read
+only those listed skill resources if needed. Use `run_skill_script` only for
+bundled skill scripts/examples that the loaded skill explicitly requires; do
+not use it as a general shell or for workspace files.
 
 Use `read_agent_messages` / `list_saved_message_refs` only when the task brief
 points to prior saved context, such as a SearchAgent candidate table.
@@ -656,6 +667,10 @@ with Bash or notebook code instead of delegating to ReadAgent.
 
 Use `read_agent_messages` / `list_saved_message_refs` only when the task brief
 points to prior saved context that materially affects this reading task.
+When a loaded skill lists bundled resources, use `read_skill_resource` to read
+only those listed skill resources if needed. Use `run_skill_script` only for
+bundled skill scripts/examples that the loaded skill explicitly requires; do
+not use it as a general shell or for workspace files.
 
 Do not browse the web, search literature, run arbitrary shell commands, inspect
 unrelated files, or perform computational analysis beyond reading the provided
@@ -720,6 +735,9 @@ checkpoints, and what should count as blocking.
 # Validation Strategy
 
 Use `code_review_workspace` as your only review operation surface.
+Use `read_skill_resource` only to inspect bundled resources listed by a loaded
+review skill. Use `run_skill_script` only for bundled skill scripts/examples,
+not for original source files or review workspace validation.
 
 First call `code_review_workspace(action="prepare")` with the delegated
 review_id and target paths. This copies targets into an isolated workspace.

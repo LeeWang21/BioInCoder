@@ -6,7 +6,7 @@ from AgentConfig import AgentConfig, AgentRegistry
 from Middleware import check_plan, shell_approval, StorePlanOutputMiddleware
 from Ask_user_tool import AskUserTool
 from Message_tools import ReadAgentMessages, ListSavedMessageRefs
-from Skill_tool import SkillTool, generate_skill_tool_prompt
+from Skill_tool import ReadSkillResource, RunSkillScript, SkillTool, generate_skill_tool_prompt
 from Todo_tools import SetPlan, UpdateChecklist, AdvanceChecklist
 from LLM import llm, llm_flash
 from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, CODE_REVIEW_AGENT_PROMPT, BIOINCODER_PROMPT
@@ -116,6 +116,16 @@ agent_registry.register_tool(name="Skill_tool_Search", tool=SkillTool(agent_name
 agent_registry.register_tool(name="Skill_tool_Browser", tool=SkillTool(agent_name="browser"))
 agent_registry.register_tool(name="Skill_tool_Read", tool=SkillTool(agent_name="reader"))
 agent_registry.register_tool(name="Skill_tool_CodeReviewAgent", tool=SkillTool(agent_name="CodeReviewAgent"))
+agent_registry.register_tool(name="Read_skill_resource_Planner", tool=ReadSkillResource(agent_name="planner"))
+agent_registry.register_tool(name="Read_skill_resource_Search", tool=ReadSkillResource(agent_name="search"))
+agent_registry.register_tool(name="Read_skill_resource_Browser", tool=ReadSkillResource(agent_name="browser"))
+agent_registry.register_tool(name="Read_skill_resource_Read", tool=ReadSkillResource(agent_name="reader"))
+agent_registry.register_tool(name="Read_skill_resource_CodeReviewAgent", tool=ReadSkillResource(agent_name="CodeReviewAgent"))
+agent_registry.register_tool(name="Run_skill_script_Planner", tool=RunSkillScript(agent_name="planner"))
+agent_registry.register_tool(name="Run_skill_script_Search", tool=RunSkillScript(agent_name="search"))
+agent_registry.register_tool(name="Run_skill_script_Browser", tool=RunSkillScript(agent_name="browser"))
+agent_registry.register_tool(name="Run_skill_script_Read", tool=RunSkillScript(agent_name="reader"))
+agent_registry.register_tool(name="Run_skill_script_CodeReviewAgent", tool=RunSkillScript(agent_name="CodeReviewAgent"))
 agent_registry.register_tool(name="Set_plan", tool=SetPlan())
 agent_registry.register_tool(name="Update_checklist", tool=UpdateChecklist())
 agent_registry.register_tool(name="Advance_checklist", tool=AdvanceChecklist())
@@ -147,7 +157,13 @@ agent_registry.register_middleware(name="shell_approval", middleware=shell_appro
 agent_registry.register_middleware(name="store_plan", middleware=StorePlanOutputMiddleware())
 
 #Plan_AgentConfig
-tools_for_plan = ["Ask_user_tool", "Skill_tool_Planner", "Bash_tool"]
+tools_for_plan = [
+    "Ask_user_tool",
+    "Skill_tool_Planner",
+    "Read_skill_resource_Planner",
+    "Run_skill_script_Planner",
+    "Bash_tool",
+]
 middleware_for_plan = ["check_plan", "store_plan", "shell_approval"]
 
 SKILL_PROMPT_FOR_PLAN = generate_skill_tool_prompt(agent_name="planner") if "Skill_tool_Planner" in tools_for_plan else ""
@@ -168,6 +184,8 @@ tools_for_search = [
     "Skill_tool_Search",
     "Read_agent_messages",
     "List_saved_message_refs",
+    "Read_skill_resource_Search",
+    "Run_skill_script_Search",
     "Academic_rest_request",
     "Search_raw_read",
 ]
@@ -187,6 +205,8 @@ Search_AgentConfig = AgentConfig(
 tools_for_browser = [
     "Ask_user_tool",
     "Skill_tool_Browser",
+    "Read_skill_resource_Browser",
+    "Run_skill_script_Browser",
     "Read_agent_messages",
     "List_saved_message_refs",
     "Agent_browser_help",
@@ -213,6 +233,8 @@ Browser_AgentConfig = AgentConfig(
 #Read_AgentConfig
 tools_for_read = [
     "Skill_tool_Read",
+    "Read_skill_resource_Read",
+    "Run_skill_script_Read",
     "Read_agent_messages",
     "List_saved_message_refs",
     "Markitdown_command",
@@ -232,6 +254,8 @@ Read_AgentConfig = AgentConfig(
 #CodeReviewAgent_AgentConfig
 tools_for_code_reviewer = [
     "Skill_tool_CodeReviewAgent",
+    "Read_skill_resource_CodeReviewAgent",
+    "Run_skill_script_CodeReviewAgent",
     "Read_agent_messages",
     "List_saved_message_refs",
     "Code_review_workspace",
