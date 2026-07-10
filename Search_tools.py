@@ -86,6 +86,18 @@ def _optional_positive_int(name: str, value: Any, maximum: int | None = None) ->
     return _positive_int(name, value, 1, maximum=maximum)
 
 
+def _non_negative_int(name: str, value: Any, default: int, maximum: int | None = None) -> int:
+    if value is None:
+        out = default
+    elif isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"`{name}` must be a non-negative integer.")
+    else:
+        out = value
+    if maximum is not None:
+        return min(out, maximum)
+    return out
+
+
 def _build_url(base_url: str, path: str) -> str:
     if path.startswith(("http://", "https://")):
         return path
@@ -216,6 +228,58 @@ def _safe_raw_output_path(raw_output_path: str | None, base_url: str, suffix: st
     return candidate
 
 
+def _resolve_search_raw_path(raw_output_path: str) -> Path:
+    root = (Path.cwd() / "artifacts" / "search").resolve()
+    path = Path(_require_str("raw_output_path", raw_output_path, required=True))
+
+    if path.is_absolute():
+        candidate = path.resolve()
+    elif len(path.parts) >= 2 and path.parts[0] == "artifacts" and path.parts[1] == "search":
+        candidate = (Path.cwd() / path).resolve()
+    else:
+        candidate = (root / path).resolve()
+
+    if root not in candidate.parents and candidate != root:
+        raise ValueError("`raw_output_path` must stay inside artifacts/search.")
+    if not candidate.exists() or not candidate.is_file():
+        raise ValueError(f"`raw_output_path` does not exist: {raw_output_path}")
+    return candidate
+
+
+def _optional_get_by_path(value: Any, path: str) -> Any:
+    try:
+        return _get_by_path(value, path)
+    except ValueError:
+        return None
+
+
+def _record_matches(record: Any, where: dict[str, str]) -> bool:
+    for key, expected in where.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("`where` keys must be non-empty strings.")
+        if not isinstance(expected, str):
+            raise ValueError("`where` values must be strings.")
+
+        field = key
+        contains = False
+        if key.endswith("__contains"):
+            field = key[: -len("__contains")]
+            contains = True
+        if not field:
+            raise ValueError("`where` field path must be non-empty.")
+
+        actual = _optional_get_by_path(record, field)
+        if actual is None:
+            return False
+        actual_text = str(actual)
+        if contains:
+            if expected.lower() not in actual_text.lower():
+                return False
+        elif actual_text != expected:
+            return False
+    return True
+
+
 def _normalize_request(payload: dict[str, Any]) -> dict[str, Any]:
     source = _require_str("source", payload.get("source")) or "custom"
     source_key = source.lower().replace("-", "_")
@@ -277,7 +341,7 @@ def _normalize_request(payload: dict[str, Any]) -> dict[str, Any]:
         "max_string": _positive_int("max_string", payload.get("max_string"), 500, maximum=3000),
         "text_head_chars": _positive_int("text_head_chars", payload.get("text_head_chars"), 2500, maximum=12000),
         "timeout_seconds": _positive_int("timeout_seconds", payload.get("timeout_seconds"), 30, maximum=120),
-        "save_raw": bool(payload.get("save_raw", False)),
+        "save_raw": bool(payload.get("save_raw", True)),
         "raw_output_path": _require_str("raw_output_path", payload.get("raw_output_path")),
     }
 
@@ -298,7 +362,7 @@ class AcademicRestRequest(BaseTool):
     description: str = (
         "Execute one controlled academic REST request from a JSON object. "
         "The input is flexible JSON, not a fixed search schema. "
-        "Supports GET/POST, params, json_body, form_body, record_path, compact previews, and optional raw saving. "
+        "Supports GET/POST, params, json_body, form_body, record_path, compact previews, and raw saving. "
         "Use this inside SearchAgent after loading the appropriate database skill."
     )
     args_schema: type[BaseModel] = AcademicRestRequestInput
@@ -411,7 +475,7 @@ class AcademicRestRequest(BaseTool):
                 "status_code": status_code,
                 "content_type": content_type,
                 "raw_output_path": raw_output_path,
-                "text_head": None if raw_output_path else text_head,
+                "text_head": text_head,
                 "text_head_truncated": len(raw_text) > len(text_head),
                 "request_summary": _request_summary(config, url, raw_output_path),
                 "warnings": [],
@@ -431,6 +495,194 @@ class AcademicRestRequest(BaseTool):
             return tool_error_response(
                 exc,
                 hint="Check that request_json is one valid academic REST request JSON object.",
+            )
+
+
+class SearchRawReadInput(BaseModel):
+    raw_output_path: str = Field(
+        ...,
+        description=(
+            "Path returned by academic_rest_request when save_raw=true. "
+            "Only files under artifacts/search may be read."
+        ),
+    )
+    record_path: str | None = Field(
+        default=None,
+        description=(
+            "Dot path to the record list inside a JSON raw response, such as "
+            "resultList.result, results, collection, or $. If omitted, the tool tries to infer it."
+        ),
+    )
+    offset: int = Field(
+        default=0,
+        description="For batch mode, zero-based record offset. Ignored when index is provided.",
+    )
+    limit: int = Field(
+        default=50,
+        description="Maximum records to return in batch or where mode. Capped at 200.",
+    )
+    index: int | None = Field(
+        default=None,
+        description="Return exactly one record by zero-based index. Takes precedence over offset/limit.",
+    )
+    where: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Optional field filters for JSON records. Keys are dot paths. "
+            "Use field__contains for case-insensitive substring matching."
+        ),
+    )
+    max_depth: int = Field(
+        default=8,
+        description="Maximum nested depth returned for records or summary. Capped at 8.",
+    )
+    max_string: int = Field(
+        default=10000,
+        description="Maximum characters per string returned. Capped at 10000.",
+    )
+    offset_chars: int = Field(
+        default=0,
+        description="For XML/text raw files, zero-based character offset.",
+    )
+    limit_chars: int = Field(
+        default=12000,
+        description="For XML/text raw files, maximum characters to return. Capped at 50000.",
+    )
+
+
+class SearchRawRead(BaseTool):
+    name: str = "search_raw_read"
+    description: str = (
+        "Read saved raw academic search responses from artifacts/search in bounded slices. "
+        "Use after academic_rest_request with save_raw=true when compact previews are truncated, "
+        "insufficient, or need DOI/PMID/title confirmation. Supports record_path, offset/limit, "
+        "index, and simple where filters for JSON raw files, plus offset_chars/limit_chars for XML/text raw files."
+    )
+    args_schema: type[BaseModel] = SearchRawReadInput
+
+    def _run(
+        self,
+        raw_output_path: str,
+        record_path: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+        index: int | None = None,
+        where: dict[str, str] | None = None,
+        max_depth: int = 8,
+        max_string: int = 10000,
+        offset_chars: int = 0,
+        limit_chars: int = 12000,
+    ) -> dict[str, Any]:
+        try:
+            resolved_path = _resolve_search_raw_path(raw_output_path)
+            offset = _non_negative_int("offset", offset, 0)
+            limit = _positive_int("limit", limit, 50, maximum=200)
+            if index is not None:
+                index = _non_negative_int("index", index, 0)
+            if where is not None:
+                where = _require_dict("where", where)
+            max_depth = _positive_int("max_depth", max_depth, 8, maximum=8)
+            max_string = _positive_int("max_string", max_string, 10000, maximum=10000)
+            offset_chars = _non_negative_int("offset_chars", offset_chars, 0)
+            limit_chars = _positive_int("limit_chars", limit_chars, 12000, maximum=50000)
+
+            suffix = resolved_path.suffix.lower()
+            if suffix != ".json":
+                raw_text = resolved_path.read_text(encoding="utf-8", errors="replace")
+                text = raw_text[offset_chars : offset_chars + limit_chars]
+                next_offset_chars = offset_chars + len(text)
+                return {
+                    "ok": True,
+                    "raw_output_path": str(resolved_path),
+                    "mode": "text",
+                    "content_type": "xml" if suffix == ".xml" else "text",
+                    "offset_chars": offset_chars,
+                    "limit_chars": limit_chars,
+                    "chars_returned": len(text),
+                    "chars_available": len(raw_text),
+                    "next_offset_chars": next_offset_chars if next_offset_chars < len(raw_text) else None,
+                    "has_more": next_offset_chars < len(raw_text),
+                    "text": text,
+                    "warnings": [],
+                }
+
+            data = json.loads(resolved_path.read_text(encoding="utf-8"))
+            path_used, target = (
+                _infer_target(data)
+                if record_path is None
+                else (_require_str("record_path", record_path), _get_by_path(data, record_path))
+            )
+
+            out: dict[str, Any] = {
+                "ok": True,
+                "raw_output_path": str(resolved_path),
+                "record_path": path_used,
+                "mode": "summary",
+                "warnings": [],
+            }
+
+            if not isinstance(target, list):
+                out["summary"] = _compact(target, None, max_depth, max_string)
+                if isinstance(target, dict):
+                    out["top_keys"] = list(target)
+                return out
+
+            record_count_available = len(target)
+            if index is not None:
+                if index >= record_count_available:
+                    raise ValueError(f"`index` {index} is out of range for {record_count_available} records.")
+                selected = [target[index]]
+                out.update(
+                    {
+                        "mode": "index",
+                        "index": index,
+                        "record_count_available": record_count_available,
+                        "record_count_returned": 1,
+                        "has_more": False,
+                    }
+                )
+            elif where:
+                matches = [record for record in target if _record_matches(record, where)]
+                selected = matches[offset : offset + limit]
+                next_offset = offset + len(selected)
+                out.update(
+                    {
+                        "mode": "where",
+                        "where": where,
+                        "offset": offset,
+                        "limit": limit,
+                        "record_count_available": record_count_available,
+                        "match_count_available": len(matches),
+                        "record_count_returned": len(selected),
+                        "next_offset": next_offset if next_offset < len(matches) else None,
+                        "truncated": next_offset < len(matches),
+                        "has_more": next_offset < len(matches),
+                    }
+                )
+            else:
+                selected = target[offset : offset + limit]
+                next_offset = offset + len(selected)
+                out.update(
+                    {
+                        "mode": "batch",
+                        "record_count_available": record_count_available,
+                        "offset": offset,
+                        "limit": limit,
+                        "record_count_returned": len(selected),
+                        "next_offset": next_offset if next_offset < record_count_available else None,
+                        "has_more": next_offset < record_count_available,
+                    }
+                )
+
+            out["records"] = _compact(selected, None, max_depth, max_string)
+            return out
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint=(
+                    "Check raw_output_path, record_path, offset/limit, index, where filters, "
+                    "or offset_chars/limit_chars. Only files saved under artifacts/search are supported."
+                ),
             )
 
 

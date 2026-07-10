@@ -12,7 +12,7 @@ from LLM import llm, llm_flash
 from Prompts import PLANNER_PROMPT, SEARCH_PROMPT, BROWSER_PROMPT, READ_PROMPT, CODE_REVIEW_AGENT_PROMPT, BIOINCODER_PROMPT
 from Runtime import MultiAgentRuntime, BioInCoderState
 from jupytercode_tool import JupyterCodeToolkit, JUPYTER_REGISTRY
-from Search_tools import AcademicRestRequest, AcademicSearch
+from Search_tools import AcademicRestRequest, AcademicSearch, SearchRawRead
 from CodeReview_tools import CodeReview, CodeReviewWorkspace
 from Persistence import make_checkpointer, session_subagent_transcripts_dir
 from Browser_tools import (
@@ -122,6 +122,7 @@ agent_registry.register_tool(name="Advance_checklist", tool=AdvanceChecklist())
 agent_registry.register_tool(name="Read_agent_messages", tool=ReadAgentMessages())
 agent_registry.register_tool(name="List_saved_message_refs", tool=ListSavedMessageRefs())
 agent_registry.register_tool(name="Academic_rest_request", tool=AcademicRestRequest())
+agent_registry.register_tool(name="Search_raw_read", tool=SearchRawRead())
 agent_registry.register_tool(name="Academic_search", tool=AcademicSearch())
 agent_registry.register_tool(name="Code_review", tool=CodeReview())
 agent_registry.register_tool(name="Code_review_workspace", tool=CodeReviewWorkspace())
@@ -168,6 +169,7 @@ tools_for_search = [
     "Read_agent_messages",
     "List_saved_message_refs",
     "Academic_rest_request",
+    "Search_raw_read",
 ]
 
 SKILL_PROMPT_FOR_SEARCH = generate_skill_tool_prompt(agent_name="search") if "Skill_tool_Search" in tools_for_search else ""

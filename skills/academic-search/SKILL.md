@@ -52,7 +52,19 @@ General rules:
 - Use database-supported filters instead of broad free-text dumps.
 - Use `record_path` for JSON APIs when the useful results are nested.
 - Use `response_format: "text"` or `"xml"` for XML APIs such as arXiv Atom.
-- Use `save_raw: true` only when raw records are needed for audit or later processing.
+- Use `save_raw: true` for every `academic_rest_request` so the complete API
+  response remains available for audit and follow-up inspection.
+- Treat `records`, `summary`, and `text_head` from `academic_rest_request` as
+  compact previews. If the preview is truncated or insufficient for the task
+  goal, use `search_raw_read` on `raw_output_path` with `record_path` before
+  finalizing results.
+- Use `search_raw_read(index=...)` to inspect a specific truncated record,
+  `search_raw_read(where={"doi": "..."})` or `where={"pmid": "..."}` to confirm
+  identifiers, and `search_raw_read(offset=..., limit=...)` to build broad
+  candidate tables in bounded batches.
+- For XML/text raw files such as arXiv Atom responses, use
+  `search_raw_read(offset_chars=..., limit_chars=...)` to inspect the saved raw
+  response in bounded text chunks.
 - Label bioRxiv/medRxiv results as preprints.
 - If an initial request returns only IDs, run a second metadata request when needed.
 

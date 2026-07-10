@@ -522,6 +522,11 @@ Use Skill only for search-specific guidance, especially the
 `bioincoder-academic-search` skill. The skill owns database/API examples,
 allowed source patterns, and response-shaping details.
 
+Set `save_raw: true` for academic API retrieval. When the compact preview from
+`academic_rest_request` is truncated or lacks fields needed for the search
+objective, use `search_raw_read` on the returned `raw_output_path` and
+`record_path` before finalizing results.
+
 Use `read_agent_messages` / `list_saved_message_refs` only when the task brief
 points to prior saved context that materially affects this search.
 
