@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from EnvConfig import load_env_file
 from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 
@@ -23,6 +24,8 @@ except ImportError:  # pragma: no cover - runtime fallback for minimal environme
     PromptSession = None
     AutoSuggestFromHistory = None
     FileHistory = None
+
+load_env_file()
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

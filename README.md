@@ -45,6 +45,18 @@ Optional runtime tools depend on the workflow:
 export DEEPSEEK_API_KEY="<your-key>"
 ```
 
+You can also keep runtime configuration in a local `.env` file:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill values such as `DEEPSEEK_API_KEY`,
+`BIOINCODER_USER_ID`, `BIOINCODER_BROWSER_USERNAME`,
+`BIOINCODER_BROWSER_PASSWORD`, `NCBI_API_KEY`, or `NCBI_EMAIL`.
+BioInCoder loads `.env` automatically on startup. Existing shell environment
+variables take precedence over values in `.env`.
+
 If your default `python3` is older than 3.10, set:
 
 ```bash

@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from EnvConfig import load_env_file
 from Persistence import artifacts_root, generate_session_id
 from Transcript import (
     DEFAULT_HISTORY_LIMIT,
@@ -14,6 +15,8 @@ from Transcript import (
     list_subagent_transcript_refs,
     read_subagent_transcript_payload,
 )
+
+load_env_file()
 
 
 def _add_session_args(parser: argparse.ArgumentParser) -> None:
