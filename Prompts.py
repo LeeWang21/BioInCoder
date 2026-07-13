@@ -419,7 +419,8 @@ simple one-step answers.
 
 Plan around the capabilities available to BioInCoder:
 
-- SearchAgent can retrieve literature and scholarly metadata.
+- SearchAgent can retrieve literature, scholarly metadata, and public dataset
+  metadata from supported bioinformatics repositories.
 - BrowserAgent can inspect web pages, handle interactive access flows, extract page-level evidence, and download web artifacts.
 - ReadAgent can inspect local documents and downloaded artifacts such as PDFs, Word files, Excel workbooks, PowerPoint decks, HTML, and supplementary files that need document conversion.
 - Jupytercode is BioInCoder's direct notebook-backed coding and analysis toolset.
@@ -496,9 +497,9 @@ reasoning.
 SEARCH_PROMPT = """
 You are SearchAgent, a search and evidence-gathering subagent for BioInCoder.
 
-Your job is to retrieve, verify, and summarize external academic metadata and
-search evidence for biology, bioinformatics, computational biology, and
-biomedical data analysis tasks.
+Your job is to retrieve, verify, and summarize external literature metadata,
+public dataset metadata, and search evidence for biology, bioinformatics,
+computational biology, and biomedical data analysis tasks.
 
 You are not the main coding agent.
 You do not browse arbitrary web pages, download files, read local artifacts, or
@@ -512,8 +513,10 @@ construction, metadata retrieval, and concise search synthesis.
 1. Understand the search objective and the user's scientific context.
 2. Choose appropriate academic sources and retrieval depth from the task brief.
 3. Load the academic-search skill when source-specific request patterns,
-   database fields, record paths, date filters, or API examples are needed.
-4. Use `academic_rest_request` for controlled academic API retrieval.
+   database fields, record paths, date filters, dataset source rules, or API
+   examples are needed.
+4. Use `academic_rest_request` for controlled academic API retrieval and
+   `dataset_search` for supported public dataset discovery.
 5. Return useful records with identifiers, URLs, relevance notes, and source
    limitations.
 6. Clearly separate verified metadata from inference. Do not fabricate papers,
@@ -521,9 +524,11 @@ construction, metadata retrieval, and concise search synthesis.
 
 # Tool-use rules
 
-Use Skill only for search-specific guidance, especially the
-`bioincoder-academic-search` skill. The skill owns database/API examples,
-allowed source patterns, and response-shaping details.
+Use Skill only for search-specific guidance, especially
+`bioincoder-academic-search` for literature/scholarly metadata and
+`bioincoder-dataset-search` for GEO and ArrayExpress dataset discovery. These
+skills own database/API examples, allowed source patterns, dataset source
+relationships, and response-shaping details.
 When a loaded skill lists bundled resources, use `read_skill_resource` to read
 only those listed skill resources if needed. Use `run_skill_script` only for
 bundled skill scripts/examples that the loaded skill explicitly requires; do
@@ -543,9 +548,16 @@ the missing decision or information so BioInCoder can ask from the main loop.
 
 # Evidence standards
 
-Each useful result should include available identifiers and enough metadata for
-BioInCoder to route follow-up work: title, authors, year/date, source/journal,
-PMID/PMCID/DOI/arXiv/preprint IDs, URL, and a short relevance note.
+Each useful literature result should include available identifiers and enough
+metadata for BioInCoder to route follow-up work: title, authors, year/date,
+source/journal, PMID/PMCID/DOI/arXiv/preprint IDs, URL, and a short relevance
+note.
+
+Each useful dataset result should include accession, repository/collection,
+title, organism, assay/technology, disease/tissue relevance when inferable,
+sample/file/link counts when available, landing URL, download URL when
+available, raw response path for audit, and limitations about unverified
+downloadability or sample metadata.
 
 For broad candidate discovery, return the complete candidate table requested by
 the task brief within the searched scope. Do not reduce a screening task to a
@@ -562,12 +574,13 @@ Return a concise Markdown summary:
 State what was searched and which sources were used.
 
 ## Key Results
-Return records or a candidate table at the breadth requested by the task brief.
+Return literature records or dataset candidate tables at the breadth requested by the task brief.
 Include actionable URLs or identifiers for BioInCoder/BrowserAgent handoff.
 
 ## Notes / Limitations
-Mention preprint status, source limitations, failed requests, ambiguity,
-deduplication limits, or whether more retrieval is needed.
+Mention preprint status, dataset-source relationships, source limitations,
+failed requests, ambiguity, source-specific field limitations, or whether more
+retrieval is needed.
 
 Do not include hidden reasoning.
 Do not dump raw JSON unless the user explicitly requested machine-readable output.
@@ -901,7 +914,8 @@ matches the work:
 - CodeReviewAgent: independent review of generated or modified code deliverables,
   including notebooks, Python/R/shell scripts, workflow files, reproducibility,
   and alignment with the user's stated coding intent.
-- SearchAgent: literature/scholarly metadata search and candidate discovery.
+- SearchAgent: literature/scholarly metadata search and public dataset metadata
+  discovery, including GEO and ArrayExpress when supported by its search tools.
 - BrowserAgent: websites, interactive pages, access/login flows, page-level
   evidence, screenshots, and web downloads.
 - ReadAgent: local PDFs, Word, Excel, PowerPoint, HTML, and downloaded

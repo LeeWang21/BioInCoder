@@ -5,6 +5,7 @@ metadata:
   tool_type: search
   primary_tools:
     - academic_rest_request
+    - search_raw_read
   intended_agent: [search]
 ---
 
@@ -68,23 +69,151 @@ General rules:
 - Label bioRxiv/medRxiv results as preprints.
 - If an initial request returns only IDs, run a second metadata request when needed.
 
+## Input
+
+`academic_rest_request` takes one argument, `request_json`. Keep examples and
+tool calls in this shape:
+
+```json
+{
+  "request_json": {
+    "source": "pubmed",
+    "endpoint": "esearch",
+    "params": {
+      "db": "pubmed",
+      "term": "KRAS[Title/Abstract] AND colorectal cancer[Title/Abstract]",
+      "retmode": "json"
+    },
+    "record_path": "esearchresult.idlist",
+    "max_items": 25,
+    "save_raw": true
+  }
+}
+```
+
+Required inside `request_json`:
+
+- `source`: one accepted source alias, or `custom` with both `base_url` and
+  `path`.
+
+Common optional fields:
+
+- `endpoint`: NCBI Entrez endpoint; used with `source="pubmed"` or
+  `source="ncbi_entrez"` to build `<endpoint>.fcgi`.
+- `base_url`: explicit HTTPS API root; only allowed hosts are accepted.
+- `path`: endpoint path under `base_url`.
+- `method`: `GET` or `POST`; most academic searches should use `GET`.
+- `params`: REST query parameters.
+- `json_body` or `form_body`: request body for POST APIs if needed; use only
+  one.
+- `record_path`: dot path to useful JSON records, such as
+  `esearchresult.idlist`, `resultList.result`, `collection`, `results`, or
+  `data`.
+- `response_format`: `auto`, `json`, `text`, or `xml`.
+- `max_items`: compact preview count for list/dict output. Use 20-50 for normal
+  screening, smaller values for smoke tests, and `search_raw_read` for larger
+  batches from saved raw.
+- `max_depth`, `max_string`, `text_head_chars`: compact-preview controls.
+- `timeout_seconds` or `timeout_sec`.
+- `save_raw`: keep `true` unless the user explicitly wants a lightweight quick
+  check.
+- `raw_output_path`: optional relative path under `artifacts/search`.
+
+## Source Selection
+
+- Use PubMed/NCBI Entrez for biomedical article discovery, PMID metadata,
+  MeSH-aware searches, and PubMed follow-up from known PMIDs.
+- Use Europe PMC for broad life-science literature, PMCID/open-access metadata,
+  DOI lookup, and topic-level preprint discovery.
+- Use bioRxiv/medRxiv API for date-window or DOI follow-up of preprints. It is
+  not a general topic search API.
+- Use arXiv for computational biology, quantitative methods, statistics, and
+  machine-learning papers.
+- Use OpenAlex for broad scholarly discovery, DOI/title disambiguation, venue
+  metadata, and cross-disciplinary coverage.
+- Use Semantic Scholar for citation counts, influential citations, abstracts,
+  and compact citation-context metadata.
+
 ## PubMed / NCBI Entrez
 
 Use for biomedical literature metadata and PubMed IDs.
 
-Base shortcut:
+Common `endpoint` values:
+
+- `esearch`: find PubMed IDs.
+- `esummary`: retrieve metadata for PMID lists.
+- `efetch`: retrieve richer XML or text records when summaries are insufficient.
+- `elink`: find linked PMC, GEO, or related Entrez records.
+- `einfo`: inspect database fields and capabilities.
+
+Common `params`:
+
+- `db`: usually `pubmed` for literature; use other Entrez databases only when
+  the task explicitly requires them.
+- `term`: Entrez query string.
+- `id`: comma-separated IDs for `esummary`, `efetch`, or `elink`.
+- `retmode`: use `json` for `esearch`, `esummary`, and `elink`; use `xml` for
+  richer `efetch` records.
+- `retmax`: number of IDs returned by `esearch`.
+- `retstart`: pagination offset.
+- `sort`: `relevance` for topical discovery, `pub date` for newest-first
+  PubMed literature searches.
+- `datetype`, `mindate`, `maxdate`: explicit date filtering. For publication
+  date searches, `datetype=pdat` is common.
+
+Useful PubMed query tags:
+
+- title/abstract: `single-cell[Title/Abstract]`
+- author: `Smith J[Author]`
+- journal: `Nature[Jour]`
+- publication date range: `2020:2026[pdat]`
+- MeSH terms: `Neoplasms[MeSH Terms]`
+- publication type: `Review[Publication Type]`, `Clinical Trial[Publication Type]`
+- exact DOI: `10.1038/s41586-020-2649-2[DOI]`
+- organism concepts: `Humans[MeSH Terms]`, `Mice[MeSH Terms]`
+
+Topical PMID discovery:
 
 ```json
 {
-  "source": "pubmed",
-  "endpoint": "esearch",
-  "params": {
-    "db": "pubmed",
-    "term": "KRAS AND colorectal cancer",
-    "retmode": "json",
-    "sort": "relevance"
-  },
-  "record_path": "esearchresult.idlist"
+  "request_json": {
+    "source": "pubmed",
+    "endpoint": "esearch",
+    "params": {
+      "db": "pubmed",
+      "term": "(KRAS[Title/Abstract]) AND (colorectal cancer[Title/Abstract])",
+      "retmode": "json",
+      "retmax": 25,
+      "sort": "relevance"
+    },
+    "record_path": "esearchresult.idlist",
+    "max_items": 25,
+    "save_raw": true
+  }
+}
+```
+
+Recent PubMed search:
+
+```json
+{
+  "request_json": {
+    "source": "pubmed",
+    "endpoint": "esearch",
+    "params": {
+      "db": "pubmed",
+      "term": "spatial transcriptomics[Title/Abstract] AND tumor microenvironment[Title/Abstract]",
+      "retmode": "json",
+      "retmax": 30,
+      "sort": "pub date",
+      "datetype": "pdat",
+      "mindate": "2023/01/01",
+      "maxdate": "2026/07/13"
+    },
+    "record_path": "esearchresult.idlist",
+    "max_items": 30,
+    "save_raw": true
+  }
 }
 ```
 
@@ -92,39 +221,73 @@ Follow up IDs with `esummary`:
 
 ```json
 {
-  "source": "pubmed",
-  "endpoint": "esummary",
-  "params": {
-    "db": "pubmed",
-    "id": "12345678,23456789",
-    "retmode": "json"
-  },
-  "record_path": "result"
+  "request_json": {
+    "source": "pubmed",
+    "endpoint": "esummary",
+    "params": {
+      "db": "pubmed",
+      "id": "12345678,23456789",
+      "retmode": "json"
+    },
+    "record_path": "result",
+    "max_depth": 5,
+    "save_raw": true
+  }
 }
 ```
 
-Useful PubMed query tags:
+Retrieve XML for detailed inspection:
 
-- title/abstract: `single-cell[Title/Abstract]`
-- author: `Smith J[Author]`
-- journal: `Nature[Jour]`
-- publication date: `2020:2026[pdat]`; for recent searches, use exact years calculated from the runtime current date
-- organism: `human[MeSH Terms]` or `mouse[MeSH Terms]`
+```json
+{
+  "request_json": {
+    "source": "pubmed",
+    "endpoint": "efetch",
+    "params": {
+      "db": "pubmed",
+      "id": "12345678,23456789",
+      "retmode": "xml"
+    },
+    "response_format": "xml",
+    "text_head_chars": 12000,
+    "save_raw": true
+  }
+}
+```
 
 ## Europe PMC
 
 Use for life-science literature across PubMed, PMC, preprints, DOI, and open-access metadata.
 
+Common `path` values:
+
+- `search`: literature search and identifier lookup.
+
+Common `params` for `search`:
+
+- `query`: Europe PMC query syntax.
+- `format`: use `json`.
+- `pageSize`: record count per page; use 20-50 for screening.
+- `page`: page number for simple pagination.
+- `cursorMark`: use for deep pagination when needed.
+- `sort`: omit for default relevance, or use explicit supported values.
+- `resultType`: `lite` for compact discovery; `core` for more metadata.
+
 ```json
 {
-  "source": "europepmc",
-  "path": "search",
-  "params": {
-    "query": "single-cell RNA-seq pancreatic cancer",
-    "format": "json",
-    "pageSize": 25
-  },
-  "record_path": "resultList.result"
+  "request_json": {
+    "source": "europepmc",
+    "path": "search",
+    "params": {
+      "query": "single-cell RNA-seq pancreatic cancer",
+      "format": "json",
+      "pageSize": 25,
+      "resultType": "core"
+    },
+    "record_path": "resultList.result",
+    "max_items": 25,
+    "save_raw": true
+  }
 }
 ```
 
@@ -135,15 +298,50 @@ Date-limited example:
 
 ```json
 {
-  "source": "europepmc",
-  "path": "search",
-  "params": {
-    "query": "(spatial transcriptomics) AND FIRST_PDATE:[2023-01-01 TO 2026-12-31]",
-    "format": "json"
-  },
-  "record_path": "resultList.result"
+  "request_json": {
+    "source": "europepmc",
+    "path": "search",
+    "params": {
+      "query": "(spatial transcriptomics) AND FIRST_PDATE:[2023-01-01 TO 2026-07-13]",
+      "format": "json",
+      "pageSize": 30,
+      "sort": "P_PDATE_D desc"
+    },
+    "record_path": "resultList.result",
+    "max_items": 30,
+    "save_raw": true
+  }
 }
 ```
+
+Known DOI lookup:
+
+```json
+{
+  "request_json": {
+    "source": "europepmc",
+    "path": "search",
+    "params": {
+      "query": "DOI:\"10.1038/s41586-020-2649-2\"",
+      "format": "json",
+      "pageSize": 5,
+      "resultType": "core"
+    },
+    "record_path": "resultList.result",
+    "max_items": 5,
+    "save_raw": true
+  }
+}
+```
+
+Useful Europe PMC query terms:
+
+- publication date: `FIRST_PDATE:[2023-01-01 TO 2026-07-13]`
+- source: `SRC:MED`, `SRC:PMC`, `SRC:PPR`
+- open access: `OPEN_ACCESS:Y`
+- full text availability: `HAS_FT:Y`
+- PubMed ID: `EXT_ID:12345678 AND SRC:MED`
+- DOI: `DOI:"10.1038/s41586-020-2649-2"`
 
 Useful explicit sort values:
 
@@ -154,13 +352,24 @@ Useful explicit sort values:
 
 Use for recent preprint metadata. The API is date-window or DOI oriented, not general full-text search.
 
+Common `path` patterns:
+
+- `details/biorxiv/YYYY-MM-DD/YYYY-MM-DD/<cursor>/json`
+- `details/medrxiv/YYYY-MM-DD/YYYY-MM-DD/<cursor>/json`
+- `details/biorxiv/<doi>/na/json`
+- `details/medrxiv/<doi>/na/json`
+
 Recent bioRxiv details:
 
 ```json
 {
-  "source": "biorxiv",
-  "path": "details/biorxiv/2026-01-01/2026-01-31/0/json",
-  "record_path": "collection"
+  "request_json": {
+    "source": "biorxiv",
+    "path": "details/biorxiv/2026-01-01/2026-01-31/0/json",
+    "record_path": "collection",
+    "max_items": 50,
+    "save_raw": true
+  }
 }
 ```
 
@@ -168,9 +377,12 @@ DOI lookup:
 
 ```json
 {
-  "source": "biorxiv",
-  "path": "details/biorxiv/10.1101/2024.01.01.123456/na/json",
-  "record_path": "collection"
+  "request_json": {
+    "source": "biorxiv",
+    "path": "details/biorxiv/10.1101/2024.01.01.123456/na/json",
+    "record_path": "collection",
+    "save_raw": true
+  }
 }
 ```
 
@@ -178,9 +390,13 @@ medRxiv uses the same host with `medrxiv` in the path:
 
 ```json
 {
-  "source": "medrxiv",
-  "path": "details/medrxiv/2026-01-01/2026-01-31/0/json",
-  "record_path": "collection"
+  "request_json": {
+    "source": "medrxiv",
+    "path": "details/medrxiv/2026-01-01/2026-01-31/0/json",
+    "record_path": "collection",
+    "max_items": 50,
+    "save_raw": true
+  }
 }
 ```
 
@@ -194,18 +410,48 @@ arXiv returns Atom XML. Use `response_format: "xml"` and summarize from `text_he
 
 ```json
 {
-  "source": "arxiv",
-  "path": "query",
-  "params": {
-    "search_query": "all:single cell RNA seq AND cat:q-bio.GN",
-    "start": 0,
-    "sortBy": "relevance",
-    "sortOrder": "descending"
-  },
-  "response_format": "xml",
-  "text_head_chars": 12000
+  "request_json": {
+    "source": "arxiv",
+    "path": "query",
+    "params": {
+      "search_query": "all:\"single cell\" AND all:\"RNA seq\" AND cat:q-bio.GN",
+      "start": 0,
+      "max_results": 25,
+      "sortBy": "relevance",
+      "sortOrder": "descending"
+    },
+    "response_format": "xml",
+    "text_head_chars": 12000,
+    "save_raw": true
+  }
 }
 ```
+
+Known arXiv ID lookup:
+
+```json
+{
+  "request_json": {
+    "source": "arxiv",
+    "path": "query",
+    "params": {
+      "id_list": "2301.00001"
+    },
+    "response_format": "xml",
+    "text_head_chars": 12000,
+    "save_raw": true
+  }
+}
+```
+
+Common arXiv `params`:
+
+- `search_query`: `all:`, `ti:`, `au:`, `abs:`, and `cat:` fielded query.
+- `id_list`: comma-separated arXiv IDs for known-paper lookup.
+- `start`: zero-based offset.
+- `max_results`: result count.
+- `sortBy`: `relevance`, `lastUpdatedDate`, or `submittedDate`.
+- `sortOrder`: `ascending` or `descending`.
 
 Common arXiv categories:
 
@@ -218,14 +464,52 @@ Common arXiv categories:
 
 Use for broad scholarly lookup, DOI/title search, and cross-disciplinary metadata.
 
+Common `path` values:
+
+- `works`: paper/work search.
+- `works/doi:<doi>`: DOI lookup; URL-encode `/` in DOI values as `%2F`.
+- `works/<openalex_id>`: known OpenAlex work lookup.
+
+Common `params` for `works`:
+
+- `search`: broad text search over works.
+- `filter`: comma-separated filters such as publication dates, open access,
+  type, DOI, author, institution, or concept filters.
+- `sort`: supported work sort field, such as `publication_date:desc` or
+  `cited_by_count:desc`.
+- `per-page`: records per page; use 20-50.
+- `cursor`: use `*` for cursor pagination when broad coverage is needed.
+- `select`: comma-separated fields when compact output is preferred.
+
 ```json
 {
-  "source": "openalex",
-  "path": "works",
-  "params": {
-    "search": "spatial transcriptomics tumor microenvironment"
-  },
-  "record_path": "results"
+  "request_json": {
+    "source": "openalex",
+    "path": "works",
+    "params": {
+      "search": "spatial transcriptomics tumor microenvironment",
+      "filter": "from_publication_date:2023-01-01,to_publication_date:2026-07-13",
+      "sort": "publication_date:desc",
+      "per-page": 25
+    },
+    "record_path": "results",
+    "max_items": 25,
+    "save_raw": true
+  }
+}
+```
+
+OpenAlex DOI lookup:
+
+```json
+{
+  "request_json": {
+    "source": "openalex",
+    "path": "works/doi:10.1038%2Fs41586-020-2649-2",
+    "record_path": "$",
+    "max_depth": 5,
+    "save_raw": true
+  }
 }
 ```
 
@@ -233,15 +517,53 @@ Use for broad scholarly lookup, DOI/title search, and cross-disciplinary metadat
 
 Use for broad paper lookup and citation context. Keep requests small.
 
+Common `path` values:
+
+- `graph/v1/paper/search`: text search.
+- `graph/v1/paper/DOI:<doi>`: DOI lookup; URL-encode `/` in DOI values as
+  `%2F`.
+- `graph/v1/paper/PMID:<pmid>`: PMID lookup.
+- `graph/v1/paper/arXiv:<id>`: arXiv ID lookup.
+
+Common `params`:
+
+- `query`: text search query.
+- `limit`: result count; keep small unless broad citation screening is needed.
+- `offset`: pagination offset.
+- `fields`: comma-separated fields to return. Ask only for fields needed for the
+  task.
+
 ```json
 {
-  "source": "semantic_scholar",
-  "path": "graph/v1/paper/search",
-  "params": {
-    "query": "single cell RNA-seq pancreatic cancer",
-    "fields": "title,authors,year,venue,url,abstract,externalIds,citationCount"
-  },
-  "record_path": "data"
+  "request_json": {
+    "source": "semantic_scholar",
+    "path": "graph/v1/paper/search",
+    "params": {
+      "query": "single cell RNA-seq pancreatic cancer",
+      "limit": 20,
+      "fields": "title,authors,year,venue,url,abstract,externalIds,citationCount,influentialCitationCount"
+    },
+    "record_path": "data",
+    "max_items": 20,
+    "save_raw": true
+  }
+}
+```
+
+Semantic Scholar identifier lookup:
+
+```json
+{
+  "request_json": {
+    "source": "semantic_scholar",
+    "path": "graph/v1/paper/DOI:10.1038%2Fs41586-020-2649-2",
+    "params": {
+      "fields": "title,authors,year,venue,url,abstract,externalIds,citationCount,references,citations"
+    },
+    "record_path": "$",
+    "max_depth": 5,
+    "save_raw": true
+  }
 }
 ```
 

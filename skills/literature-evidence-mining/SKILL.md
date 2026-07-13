@@ -1,6 +1,6 @@
 ---
 name: literature-evidence-mining
-description: Coordinate Agent for large-scale literature screening, paper-by-paper evidence extraction, supplementary file/resource retrieval, and structured evidence table construction. Use when users need to find many papers, screen literature, or extract specific information/resources from papers, full text, methods, PDFs, supplementary tables, datasets, protocols, catalog numbers, accession IDs, software versions, or other paper-linked evidence.
+description: Coordinate Agent for large-scale literature or evidence-bearing record screening, paper-by-paper evidence extraction, supplementary file/resource retrieval, and structured evidence table construction. Use when users need to find many papers or repository records, screen literature, or extract specific information/resources from papers, full text, methods, PDFs, supplementary tables, datasets, protocols, catalog numbers, accession IDs, software versions, or other evidence-linked records.
 metadata:
   tool_type: orchestration
   primary_tools:
@@ -12,7 +12,9 @@ metadata:
 
 # BioInCoder Literature Evidence Mining
 
-Use this skill when BioInCoder must coordinate multiple agents to find papers and extract specific evidence or resources from them.
+Use this skill when BioInCoder must coordinate multiple agents to find papers
+or evidence-bearing repository records and extract specific evidence or
+resources from them.
 
 This is an orchestration skill for BioInCoder. It is not a SearchAgent-only, BrowserAgent-only, or ReadAgent-only skill.
 
@@ -44,7 +46,7 @@ Do not stop just because high-priority papers produced an answer unless the user
 Keep four table concepts distinct:
 
 1. `Search candidate table`: SearchAgent's raw candidate output. It contains
-   literature metadata and search-level relevance notes only.
+   literature or repository metadata and search-level relevance notes only.
 2. `Master candidate table`: BioInCoder's deduplicated and prioritized
    candidate table derived from the Search candidate table.
 3. `Candidate Tracking Table`: BioInCoder's running processing-status table
@@ -73,8 +75,9 @@ BioInCoder owns the workflow:
 
 SearchAgent:
 
-- retrieve candidate literature records and scholarly metadata;
-- use academic databases and search tools;
+- retrieve candidate literature records, scholarly metadata, and supported
+  public dataset repository metadata;
+- use academic databases, dataset databases, and search tools;
 - return identifiers and actionable URLs;
 - do not open webpages, download files, or read local artifacts.
 
@@ -137,15 +140,14 @@ Ask the user only when a missing criterion would materially change screening.
 
 Use SearchAgent to retrieve a broad candidate set.
 
-For large-scale literature tasks, do not accept an incomplete summary as the
-candidate set. Ask SearchAgent to retrieve records according to the requested
-coverage goal and to explain whether coverage was constrained by query
-specificity, source coverage, deduplication, relevance filtering, or source
-behavior.
+For large-scale evidence-mining tasks, do not accept an incomplete summary as
+the candidate set. Ask SearchAgent to retrieve records from appropriate entry
+points, including literature databases and supported dataset databases such as
+GEO or ArrayExpress when relevant.
 
 For broad or complete candidate retrieval, ask SearchAgent to save raw academic
-API responses and use `search_raw_read` when compact previews are truncated or
-insufficient for the candidate table.
+or dataset API responses and use `search_raw_read` when compact previews are
+truncated or insufficient for the candidate table.
 
 ### Multi-Round Search Strategy
 
@@ -160,13 +162,14 @@ Combine:
   code, GitHub, supplement, Table S, method, protocol, primer, reagent,
   availability;
 - source families: PubMed, Europe PMC, OpenAlex, Semantic Scholar, arXiv,
-  bioRxiv/medRxiv when appropriate.
+  bioRxiv/medRxiv, GEO, and ArrayExpress when appropriate.
 
 Use multiple rounds when coverage matters:
 
 1. Broad discovery queries to identify the candidate universe.
 2. Focused evidence queries that add evidence-bearing terms.
-3. Source-specific follow-up queries for missing identifiers or open full text.
+3. Source-specific follow-up queries for missing identifiers, repository
+   accessions, linked literature, or open full text.
 4. Backfill queries for key synonyms, spelling variants, older names, or
    user-provided terms.
 5. Optional citation/bibliography expansion when the first rounds reveal a
@@ -211,7 +214,8 @@ decisions. `search_reason` explains why the record was retrieved, not a final
 screening decision.
 
 If records come from multiple sources, BioInCoder must merge and deduplicate by
-DOI, PMID, PMCID, title, and URL. Do not lose candidate records when summarizing.
+DOI, PMID, PMCID, title, and URL. Do not lose candidate records when
+summarizing.
 
 ## Phase 3: Prioritize Without Dropping Records
 
@@ -605,11 +609,11 @@ BioInCoder must write self-contained `task_brief` messages. Subagents do not rec
 
 ```text
 # Overall Goal
-Find papers that may contain [detailed target evidence].
+Find papers or repository records that may contain [detailed target evidence].
 
 # Current Subtask
 Retrieve a broad candidate set for screening using multiple query families and
-sources when coverage matters.
+literature or dataset database sources when coverage matters.
 
 # Relevant Context
 [disease/species/method/target/resource constraints]
@@ -631,9 +635,9 @@ Do not open webpages, download files, or read local artifacts.
 Return search_rounds plus a complete Search candidate table with candidate_id,
 title, year, journal_or_source, PMID, PMCID, DOI, URL,
 sources, search_reason, and search_notes.
-Report raw_output_path/record_path when raw API responses were saved, and note
-whether `search_raw_read` was needed to resolve truncated or incomplete
-previews.
+Report raw_output_path/record_path when raw academic or dataset API responses
+were saved, and note whether `search_raw_read` was needed to resolve truncated
+or incomplete previews.
 Do not assign final priority labels. Do not make final inclusion/exclusion
 decisions unless a record is obviously unrelated; note uncertainty in
 search_notes.
@@ -642,7 +646,8 @@ search_notes.
 Stop after the requested coverage goal is reached, selected databases are exhausted, or clear source limitations prevent further retrieval.
 
 # Handoff
-BioInCoder will prioritize candidates and send individual papers to BrowserAgent.
+BioInCoder will prioritize candidates and send individual papers or repository
+pages to BrowserAgent when page-level inspection is needed.
 ```
 
 ### BrowserAgent

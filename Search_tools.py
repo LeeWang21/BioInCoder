@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import date
 from pathlib import Path
@@ -47,6 +48,18 @@ SOURCE_ALIASES = {
     "europe-pmc": "europepmc",
     "semantic-scholar": "semantic_scholar",
     "semanticscholar": "semantic_scholar",
+}
+DATASET_SOURCE_ALIASES = {
+    "geo": "geo",
+    "gds": "geo",
+    "ncbi_geo": "geo",
+    "arrayexpress": "arrayexpress",
+    "array_express": "arrayexpress",
+    "ae": "arrayexpress",
+}
+DATASET_BASE_URLS = {
+    "geo": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils",
+    "arrayexpress": "https://www.ebi.ac.uk/biostudies/api/v1",
 }
 
 
@@ -193,10 +206,15 @@ def _compact(value: Any, max_items: int | None, max_depth: int, max_string: int)
 
 
 def _request_summary(config: dict[str, Any], final_url: str, raw_output_path: str | None) -> dict[str, Any]:
+    params = {
+        key: "[redacted]" if str(key).lower() in {"api_key", "apikey", "key", "token"} else value
+        for key, value in config["params"].items()
+    }
+    has_sensitive_params = params != config["params"]
     return {
-        "url": final_url,
+        "url": f"{config['url']}?[query redacted due to sensitive params]" if has_sensitive_params else final_url,
         "url_without_query": config["url"],
-        "params": _compact(config["params"], max_items=50, max_depth=3, max_string=1000),
+        "params": _compact(params, max_items=50, max_depth=3, max_string=1000),
         "param_keys": list(config["params"].keys()),
         "json_body": _compact(config["json_body"], max_items=30, max_depth=3, max_string=1000)
         if config["json_body"] is not None
@@ -218,7 +236,7 @@ def _safe_raw_output_path(raw_output_path: str | None, base_url: str, suffix: st
             raise ValueError("`raw_output_path` must be relative to artifacts/search.")
         candidate = (root / path).resolve()
     else:
-        filename = f"{_service_name(base_url)}-{int(time.time())}.{suffix}"
+        filename = f"{_service_name(base_url)}-{time.time_ns()}.{suffix}"
         candidate = (root / filename).resolve()
 
     if root.resolve() not in candidate.parents and candidate != root.resolve():
@@ -350,9 +368,11 @@ class AcademicRestRequestInput(BaseModel):
     request_json: dict[str, Any] = Field(
         ...,
         description=(
-            "One JSON object describing an academic API request. "
-            "Use source-specific skills to construct this JSON. Supported sources include "
-            "pubmed/ncbi_entrez, biorxiv, medrxiv, arxiv, europepmc, openalex, and semantic_scholar."
+            "One controlled REST request JSON for scholarly/literature metadata APIs. "
+            "Use source-specific skills to choose fields such as source, endpoint/path, params, "
+            "record_path, response_format, max_items, save_raw, and raw_output_path. "
+            "Supported source shortcuts include pubmed/ncbi_entrez, biorxiv, medrxiv, "
+            "arxiv, europepmc, openalex, and semantic_scholar."
         ),
     )
 
@@ -360,10 +380,10 @@ class AcademicRestRequestInput(BaseModel):
 class AcademicRestRequest(BaseTool):
     name: str = "academic_rest_request"
     description: str = (
-        "Execute one controlled academic REST request from a JSON object. "
-        "The input is flexible JSON, not a fixed search schema. "
-        "Supports GET/POST, params, json_body, form_body, record_path, compact previews, and raw saving. "
-        "Use this inside SearchAgent after loading the appropriate database skill."
+        "Execute one controlled scholarly REST request from request_json and return a compact dict. "
+        "Use for literature and scholarly metadata APIs after loading the relevant SearchAgent skill. "
+        "Supports source shortcuts, GET/POST, params, json_body/form_body, record_path extraction, "
+        "compact JSON/text previews, and raw response saving under artifacts/search."
     )
     args_schema: type[BaseModel] = AcademicRestRequestInput
 
@@ -502,61 +522,62 @@ class SearchRawReadInput(BaseModel):
     raw_output_path: str = Field(
         ...,
         description=(
-            "Path returned by academic_rest_request when save_raw=true. "
-            "Only files under artifacts/search may be read."
+            "Raw response path returned by academic_rest_request or dataset_search when save_raw=true. "
+            "Only files under artifacts/search are readable."
         ),
     )
     record_path: str | None = Field(
         default=None,
         description=(
             "Dot path to the record list inside a JSON raw response, such as "
-            "resultList.result, results, collection, or $. If omitted, the tool tries to infer it."
+            "resultList.result, esearchresult.idlist, hits, results, collection, or $. "
+            "If omitted, the tool tries to infer a useful record list or summary."
         ),
     )
     offset: int = Field(
         default=0,
-        description="For batch mode, zero-based record offset. Ignored when index is provided.",
+        description="Zero-based record offset for JSON batch/where reads. Ignored when index is provided.",
     )
     limit: int = Field(
         default=50,
-        description="Maximum records to return in batch or where mode. Capped at 200.",
+        description="Maximum JSON records to return in batch/where mode. Capped at 200.",
     )
     index: int | None = Field(
         default=None,
-        description="Return exactly one record by zero-based index. Takes precedence over offset/limit.",
+        description="Return exactly one JSON record by zero-based index. Takes precedence over offset/limit.",
     )
     where: dict[str, str] | None = Field(
         default=None,
         description=(
-            "Optional field filters for JSON records. Keys are dot paths. "
-            "Use field__contains for case-insensitive substring matching."
+            "Optional filters for JSON record lists. Keys are dot paths; suffix a key with "
+            "__contains for case-insensitive substring matching."
         ),
     )
     max_depth: int = Field(
         default=8,
-        description="Maximum nested depth returned for records or summary. Capped at 8.",
+        description="Maximum nested depth returned for JSON records or summaries. Capped at 8.",
     )
     max_string: int = Field(
         default=10000,
-        description="Maximum characters per string returned. Capped at 10000.",
+        description="Maximum characters per returned JSON string value. Capped at 10000.",
     )
     offset_chars: int = Field(
         default=0,
-        description="For XML/text raw files, zero-based character offset.",
+        description="Zero-based character offset for XML/text raw files.",
     )
     limit_chars: int = Field(
         default=12000,
-        description="For XML/text raw files, maximum characters to return. Capped at 50000.",
+        description="Maximum characters to return from XML/text raw files. Capped at 50000.",
     )
 
 
 class SearchRawRead(BaseTool):
     name: str = "search_raw_read"
     description: str = (
-        "Read saved raw academic search responses from artifacts/search in bounded slices. "
-        "Use after academic_rest_request with save_raw=true when compact previews are truncated, "
-        "insufficient, or need DOI/PMID/title confirmation. Supports record_path, offset/limit, "
-        "index, and simple where filters for JSON raw files, plus offset_chars/limit_chars for XML/text raw files."
+        "Read saved raw search responses from artifacts/search in bounded slices. "
+        "Use after academic_rest_request or dataset_search when compact previews are truncated, "
+        "insufficient, or need field-level confirmation. Supports record_path, offset/limit, "
+        "index, and where filters for JSON files, plus offset_chars/limit_chars for XML/text files."
     )
     args_schema: type[BaseModel] = SearchRawReadInput
 
@@ -686,19 +707,309 @@ class SearchRawRead(BaseTool):
             )
 
 
+
+def _dataset_source_key(source: str | None) -> str:
+    source_key = (source or "").strip().lower().replace("-", "_").replace(" ", "_")
+    source_key = DATASET_SOURCE_ALIASES.get(source_key, source_key)
+    if source_key not in DATASET_BASE_URLS:
+        raise ValueError("`source` must be one of: geo, arrayexpress.")
+    return source_key
+
+
+def _dataset_default_path(source: str, payload: dict[str, Any]) -> str:
+    if source == "geo":
+        endpoint = _require_str("endpoint", payload.get("endpoint")) or "esearch"
+        if endpoint not in NCBI_ENTREZ_ENDPOINTS:
+            raise ValueError(f"For source=geo, `endpoint` must be one of {sorted(NCBI_ENTREZ_ENDPOINTS)}.")
+        return f"{endpoint}.fcgi"
+    if source == "arrayexpress":
+        return "ArrayExpress/search"
+    raise ValueError(f"Unsupported dataset source: {source}")
+
+
+def _dataset_default_record_path(source: str, path: str, payload: dict[str, Any]) -> str | None:
+    explicit = _require_str("record_path", payload.get("record_path"))
+    if explicit is not None:
+        return explicit
+    if source == "geo":
+        endpoint = path.rsplit("/", 1)[-1].removesuffix(".fcgi")
+        if endpoint == "esearch":
+            return "esearchresult.idlist"
+        if endpoint == "esummary":
+            return "result"
+        return None
+    if source == "arrayexpress" and path.rstrip("/") in {"ArrayExpress/search", "search"}:
+        return "hits"
+    return None
+
+
+def _ncbi_common_params(params: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(params)
+    api_key = os.environ.get("NCBI_API_KEY") or os.environ.get("NCBI_EUTILS_API_KEY")
+    tool = os.environ.get("NCBI_TOOL")
+    email = os.environ.get("NCBI_EMAIL")
+    if api_key and "api_key" not in merged:
+        merged["api_key"] = api_key
+    if tool and "tool" not in merged:
+        merged["tool"] = tool
+    if email and "email" not in merged:
+        merged["email"] = email
+    return merged
+
+
+def _dataset_params(source: str, path: str, payload: dict[str, Any], max_items: int | None) -> dict[str, Any]:
+    params = _require_dict("params", payload.get("params"))
+    query = _require_str("query", payload.get("query"))
+    merged = dict(params)
+
+    if source == "geo":
+        endpoint = path.rsplit("/", 1)[-1].removesuffix(".fcgi")
+        merged.setdefault("db", "gds")
+        if query is not None and endpoint == "esearch":
+            merged.setdefault("term", query)
+        if endpoint in {"esearch", "esummary"}:
+            merged.setdefault("retmode", "json")
+        if max_items is not None and endpoint == "esearch":
+            merged.setdefault("retmax", max_items)
+        return _ncbi_common_params(merged)
+
+    if source == "arrayexpress":
+        if query is not None:
+            merged.setdefault("query", query)
+        if path.rstrip("/") == "ArrayExpress/search":
+            merged.setdefault("page", 1)
+            if max_items is not None:
+                merged.setdefault("pageSize", max_items)
+        return merged
+
+    return merged
+
+
+def _normalize_dataset_request(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("`request_json` must be one JSON object.")
+
+    source = _dataset_source_key(_require_str("source", payload.get("source"), required=True))
+    base_url = _require_str("base_url", payload.get("base_url")) or DATASET_BASE_URLS[source]
+    path = _require_str("path", payload.get("path")) or _dataset_default_path(source, payload)
+
+    method = (_require_str("method", payload.get("method")) or "GET").upper()
+    if method not in {"GET", "POST"}:
+        raise ValueError("`method` must be GET or POST.")
+
+    json_body = payload.get("json_body")
+    form_body = payload.get("form_body")
+    if json_body is not None and form_body is not None:
+        raise ValueError("Provide only one of `json_body` or `form_body`.")
+
+    response_format = (_require_str("response_format", payload.get("response_format")) or "auto").lower()
+    if response_format not in {"auto", "json", "text", "xml"}:
+        raise ValueError("`response_format` must be auto, json, text, or xml.")
+
+    max_items = _optional_positive_int("max_items", payload.get("max_items"), maximum=200)
+    url = _build_url(base_url, path)
+    _validate_host(url)
+
+    headers = _require_dict("headers", payload.get("headers"))
+    blocked_headers = {"authorization", "cookie", "x-api-key"}
+    for header in headers:
+        if header.lower() in blocked_headers:
+            raise ValueError(f"Header `{header}` is not allowed in dataset_search.")
+    headers.setdefault("User-Agent", "BioInCoder dataset_search/0.1")
+    headers.setdefault("Accept", "application/json, text/xml, application/xml, text/plain;q=0.8, */*;q=0.5")
+
+    return {
+        "source": source,
+        "base_url": base_url,
+        "url": url,
+        "path": path,
+        "method": method,
+        "params": _dataset_params(source, path, payload, max_items),
+        "headers": headers,
+        "json_body": json_body,
+        "form_body": _require_dict("form_body", form_body) if form_body is not None else None,
+        "record_path": _dataset_default_record_path(source, path, payload),
+        "response_format": response_format,
+        "max_items": max_items or 30,
+        "max_depth": _positive_int("max_depth", payload.get("max_depth"), 4, maximum=8),
+        "max_string": _positive_int("max_string", payload.get("max_string"), 500, maximum=3000),
+        "text_head_chars": _positive_int("text_head_chars", payload.get("text_head_chars"), 2500, maximum=12000),
+        "timeout_seconds": _positive_int(
+            "timeout_seconds",
+            payload.get("timeout_seconds") if payload.get("timeout_seconds") is not None else payload.get("timeout_sec"),
+            30,
+            maximum=120,
+        ),
+        "save_raw": bool(payload.get("save_raw", True)),
+        "raw_output_path": _require_str("raw_output_path", payload.get("raw_output_path")),
+    }
+
+
+class DatasetSearchInput(BaseModel):
+    request_json: dict[str, Any] = Field(
+        ...,
+        description=(
+            "One controlled REST request JSON for dataset metadata APIs. "
+            "Supported source shortcuts are geo and arrayexpress. Common fields include source, "
+            "endpoint or path, query, params, record_path, response_format, max_items, "
+            "max_depth, max_string, timeout_sec/timeout_seconds, save_raw, and raw_output_path. "
+            "If omitted, max_items defaults to 30 for dataset searches."
+        ),
+    )
+
+
+class DatasetSearch(BaseTool):
+    name: str = "dataset_search"
+    description: str = (
+        "Execute one controlled dataset REST request from request_json and return a compact dict. "
+        "Use for public dataset metadata after loading the dataset-search skill. "
+        "Supports GEO via NCBI Entrez gds and ArrayExpress via the EBI BioStudies ArrayExpress/search endpoint, "
+        "with params, record_path extraction, compact JSON/text previews, and raw response saving under artifacts/search."
+    )
+    args_schema: type[BaseModel] = DatasetSearchInput
+
+    def _run(self, request_json: dict[str, Any]) -> dict[str, Any]:
+        try:
+            config = _normalize_dataset_request(request_json)
+            url = config["url"]
+            params = config["params"]
+            if params:
+                query = urlencode(params, doseq=True)
+                separator = "&" if "?" in url else "?"
+                url = f"{url}{separator}{query}"
+
+            body = None
+            headers = dict(config["headers"])
+            if config["json_body"] is not None:
+                body = json.dumps(config["json_body"]).encode("utf-8")
+                headers["Content-Type"] = "application/json"
+            elif config["form_body"] is not None:
+                body = urlencode(config["form_body"], doseq=True).encode("utf-8")
+                headers["Content-Type"] = "application/x-www-form-urlencoded"
+
+            req = Request(url=url, data=body, headers=headers, method=config["method"])
+            with urlopen(req, timeout=config["timeout_seconds"]) as response:
+                raw_bytes = response.read()
+                status_code = response.status
+                content_type = (response.headers.get("content-type") or "").lower()
+
+            raw_text = raw_bytes.decode("utf-8", errors="replace")
+            wants_text = config["response_format"] in {"text", "xml"}
+            wants_json = config["response_format"] == "json"
+            auto_json = (
+                config["response_format"] == "auto"
+                and ("json" in content_type or raw_text.lstrip().startswith(("{", "[")))
+            )
+
+            raw_output_path = None
+            if wants_json or auto_json:
+                data = json.loads(raw_text)
+                if config["save_raw"]:
+                    raw_path = _safe_raw_output_path(config["raw_output_path"], config["base_url"], "json")
+                    raw_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                    raw_output_path = str(raw_path)
+
+                record_path = config["record_path"]
+                path_used, target = (
+                    _infer_target(data)
+                    if record_path is None
+                    else (record_path, _get_by_path(data, record_path))
+                )
+
+                out: dict[str, Any] = {
+                    "ok": True,
+                    "source": config["source"],
+                    "base_url": config["base_url"],
+                    "path": config["path"],
+                    "method": config["method"],
+                    "status_code": status_code,
+                    "content_type": content_type,
+                    "record_path": path_used,
+                    "raw_output_path": raw_output_path,
+                    "request_summary": _request_summary(config, url, raw_output_path),
+                    "warnings": [],
+                }
+
+                if isinstance(target, list):
+                    records = target if config["max_items"] is None else target[: config["max_items"]]
+                    out.update(
+                        {
+                            "record_count_returned": len(records),
+                            "record_count_available": len(target),
+                            "truncated": len(records) < len(target),
+                            "records": _compact(
+                                records,
+                                config["max_items"],
+                                config["max_depth"],
+                                config["max_string"],
+                            ),
+                        }
+                    )
+                else:
+                    out["summary"] = _compact(
+                        target,
+                        config["max_items"],
+                        config["max_depth"],
+                        config["max_string"],
+                    )
+                    if isinstance(target, dict):
+                        out["top_keys"] = (
+                            list(target)
+                            if config["max_items"] is None
+                            else list(target)[: config["max_items"]]
+                        )
+                return out
+
+            if config["save_raw"]:
+                suffix = "xml" if "xml" in content_type or wants_text else "txt"
+                raw_path = _safe_raw_output_path(config["raw_output_path"], config["base_url"], suffix)
+                raw_path.write_text(raw_text, encoding="utf-8")
+                raw_output_path = str(raw_path)
+
+            text_head = raw_text[: config["text_head_chars"]]
+            return {
+                "ok": True,
+                "source": config["source"],
+                "base_url": config["base_url"],
+                "path": config["path"],
+                "method": config["method"],
+                "status_code": status_code,
+                "content_type": content_type,
+                "raw_output_path": raw_output_path,
+                "text_head": text_head,
+                "text_head_truncated": len(raw_text) > len(text_head),
+                "request_summary": _request_summary(config, url, raw_output_path),
+                "warnings": [],
+            }
+        except HTTPError as exc:
+            return tool_error_response(
+                f"HTTP {exc.code}: {exc.reason}",
+                error_type="HTTPError",
+                hint="Check the dataset request JSON, endpoint/path, parameters, and rate limits.",
+            )
+        except URLError as exc:
+            return tool_error_response(
+                exc,
+                hint="Network access failed or the dataset API host is unavailable.",
+            )
+        except Exception as exc:
+            return tool_error_response(
+                exc,
+                hint="Check that request_json is one valid dataset REST request JSON object.",
+            )
+
+
 class AcademicSearchInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     task_brief: str = Field(
         ...,
         description=(
-            "Self-contained handoff brief for SearchAgent. Subagents do not receive the full BioInCoder conversation. "
-            "Include: Overall Goal, Current Subtask, Relevant Context, Inputs such as queries/entities/DOIs/PMIDs/URLs, "
-            "Scope Boundary, Required Output, Stop Condition, and Handoff. Include search scope, scientific context, "
-            "target entities, inclusion/exclusion criteria, source preferences, date constraints, desired result breadth, "
-            "required identifiers/URLs, and any BrowserAgent follow-up requirements. For broad literature screening or "
-            "as-many-as-possible requests, explicitly request a complete candidate table and let SearchAgent choose "
-            "retrieval depth from the task scope and source behavior rather than summarizing away relevant records."
+            "Self-contained task brief for SearchAgent. Include the overall goal, current search subtask, "
+            "relevant scientific context, concrete inputs such as queries/accessions/DOIs/PMIDs/URLs, "
+            "source preferences, inclusion/exclusion criteria, date or recency constraints, desired breadth, "
+            "required output fields/table shape, stop condition, and any BrowserAgent handoff needs. "
+            "For broad screening, explicitly request the candidate-table breadth instead of asking for a few examples."
         ),
     )
     runtime: ToolRuntime
@@ -707,10 +1018,10 @@ class AcademicSearchInput(BaseModel):
 class AcademicSearch(BaseTool):
     name: str = "academic_search"
     description: str = (
-        "Call the SearchAgent to perform academic literature/database search. "
-        "Use for PubMed/Entrez, bioRxiv/medRxiv, arXiv, Europe PMC, OpenAlex, Semantic Scholar, "
-        "or other scholarly metadata searches. The SearchAgent can construct flexible JSON requests "
-        "with academic_rest_request and saves its full transcript to Search_Channel."
+        "Delegate a literature, scholarly metadata, or public dataset search to SearchAgent. "
+        "Use when the main agent needs PubMed/Entrez, bioRxiv/medRxiv, arXiv, Europe PMC, "
+        "OpenAlex, Semantic Scholar, GEO, ArrayExpress, or related metadata retrieval. "
+        "SearchAgent chooses and calls academic_rest_request or dataset_search as appropriate and saves its transcript."
     )
     args_schema: type[BaseModel] = AcademicSearchInput
 

@@ -9,7 +9,7 @@ It is built on LangChain/LangGraph and provides:
 - specialized subagents for planning, academic search, browser work, and local
   document reading
 - project skills under `skills/` for single-cell, ATAC-seq, literature mining,
-  browser workflows, and notebook-backed analysis
+  browser workflows, public dataset discovery, and notebook-backed analysis
 - Jupyter notebook tools for traceable code execution
 
 ## Project Layout
@@ -117,6 +117,7 @@ python3 validate_skills.py
 Current skill areas include:
 
 - academic search
+- public transcriptomics dataset discovery across GEO and ArrayExpress
 - browser workflows
 - local document reading
 - Jupyter-backed coding
