@@ -7,7 +7,7 @@ metadata:
     - academic_search
     - browser_browse
     - read_artifact
-  intended_agent: [BioInCoder, planner]
+  intended_agent: [BioInCoder]
 ---
 
 # BioInCoder Literature Evidence Mining
@@ -28,14 +28,12 @@ Use planned, tracked, progressive evidence mining:
 2. Discuss materially ambiguous retrieval details with the user before large searches.
 3. Search broadly enough to build a complete candidate table.
 4. For large searches, use multiple rounds, keyword families, and sources.
-5. Prioritize candidates, but do not drop lower-priority records from tracking.
-6. Process papers one by one in priority order.
+5. Prioritize the complete candidates, but do not drop lower-priority records from tracking.
+6. Process paper or dataset candidates one by one in priority order.
 7. Use the cheapest sufficient evidence source first.
-8. Within each paper, search the most likely evidence location before reading broadly.
+8. Within each paper or dataset, search the most likely evidence location before reading broadly.
 9. Escalate only when needed: metadata -> page evidence -> targeted section/page -> downloaded artifacts -> ReadAgent.
 10. Update candidate and evidence tables after every paper or small milestone.
-
-Do not stop just because high-priority papers produced an answer unless the user explicitly asked for only top results or a quick sample.
 
 ## Table Flow
 
@@ -43,17 +41,17 @@ Keep four table concepts distinct:
 
 1. `Search candidate table`: SearchAgent's raw candidate output. It contains
    literature or repository metadata and search-level relevance notes only.
-2. `Master candidate table`: BioInCoder's deduplicated and prioritized
+2. `Screening candidate table`: BioInCoder's deduplicated and prioritized
    candidate table derived from the Search candidate table.
 3. `Candidate Tracking Table`: BioInCoder's running processing-status table
-   derived from the Master candidate table as papers are browsed, read,
+   derived from the Screening candidate table as papers are browsed, read,
    blocked, excluded, or completed.
 4. `Evidence Extraction Table`: BioInCoder's detailed evidence table derived
    from each processed candidate. It stores extracted values, snippets,
    locations, artifacts, confidence, and limitations.
 
 Do not collapse these tables into one vague summary. Stage reports may be
-short, but BioInCoder must preserve the complete Search candidate table, Master candidate table,
+short, but BioInCoder must preserve the complete Search candidate table, Screening candidate table,
 Candidate Tracking Table, and Evidence Extraction Table as the work progresses.
 For long or high-value mining tasks, save key working tables as downloadable
 local artifacts such as CSV, TSV, Markdown, or JSON, and report the file paths.
@@ -138,7 +136,9 @@ Use SearchAgent to retrieve a broad candidate set.
 
 Ask SearchAgent to retrieve records from appropriate entry
 points, including literature databases and supported dataset databases such as
-GEO or ArrayExpress when relevant. Build and keep a broad and complete candidate pool for subsequent screen.
+GEO or ArrayExpress when relevant based on metadata. Build the candidate pool according to the requested coverage mode.
+For exhaustive searches, maximize recall and preserve broad candidates for downstream screening before applying narrow evidence-level filters. For best-effort searches, balance recall and precision within the available time and source
+limits. For top-N searches, return only the requested number of strongest candidates and state the ranking basis.
 
 For broad or complete candidate retrieval, ask SearchAgent to save raw academic
 or dataset API responses and use `search_raw_read` when compact previews are
@@ -212,9 +212,11 @@ If records come from multiple sources, BioInCoder must merge and deduplicate by
 DOI, PMID, PMCID, title, and URL. Do not lose candidate records when
 summarizing.
 
+SearchAgent output must include the path related to search artifacts.
+
 ## Phase 3: Prioritize Without Dropping Records
 
-BioInCoder converts the `Search candidate table` into the `Master candidate
+BioInCoder converts the `Search candidate table` and raw academic search result into the `Screening candidate
 table` by merging, deduplicating, and ranking candidates by likelihood of
 containing the target evidence.
 
@@ -226,7 +228,7 @@ Priority factors may include:
 - recency, paper type, and source quality;
 - user-specified importance.
 
-Keep all candidates in the master table. Use priority labels such as:
+Keep all candidates in the Screening table. Use priority labels such as:
 
 ```text
 high
@@ -238,7 +240,7 @@ duplicate
 
 Lower-priority candidates may be delayed, but not silently discarded.
 
-After prioritization, BioInCoder must create or update the `Master candidate
+After prioritization, BioInCoder must create or update the `Screening candidate
 table`:
 
 ```text
@@ -256,13 +258,13 @@ priority
 priority_reason
 ```
 
-The `Master candidate table` should not yet mix in detailed browsing/reading
+The `Screening candidate table` should not yet mix in detailed browsing/reading
 state. `proc_status`, access state, and blockers belong in the
 `Candidate Tracking Table`.
 
 ## Phase 4: Process One Paper at a Time
 
-Default mode is one-paper-at-a-time evidence closure using the `Master candidate
+Default mode is one-paper-at-a-time evidence closure using the `Screening candidate
 table` priority order.
 
 For each candidate in priority order:
@@ -460,12 +462,12 @@ read_agent_needed_next: yes/no
 
 ## Tracking Tables
 
-After the `Master candidate table` is created, maintain two running tables.
+After the `Screening candidate table` is created, maintain two running tables.
 
 ### Candidate Tracking Table
 
 This table tracks the per-candidate state of browsing, reading, blocking,
-deferral, exclusion, and completion. It is derived from the `Master candidate
+deferral, exclusion, and completion. It is derived from the `Screening candidate
 table`, not directly from SearchAgent output.
 
 ```text
@@ -512,7 +514,7 @@ deferred_low_priority
 ### Evidence Extraction Table
 
 This table captures detailed evidence found while processing candidates from
-the `Master candidate table`.
+the `Screening candidate table`.
 
 ```text
 candidate_id
@@ -539,12 +541,12 @@ evidence row or clear tracking note with the locations checked and limitations.
 ## Stage Reports
 
 For long tasks, report progress periodically without losing the complete
-`Master candidate table`, `Candidate Tracking Table`, or `Evidence Extraction
+`Screening candidate table`, `Candidate Tracking Table`, or `Evidence Extraction
 Table`.
 
 Report interim results when useful evidence has accumulated, when a batch boundary is reached, or when progress may take a long time. Good reporting points include:
 
-- after the `Master candidate table` is built and prioritized;
+- after the `Screening candidate table` is built and prioritized;
 - after every 5-10 processed candidates;
 - after any strong evidence is found;
 - after repeated blockers suggest a strategy change;
@@ -568,7 +570,7 @@ For evidence-mining tasks, an interim report should usually include:
 - newly found high-value evidence with candidate_id and source;
 - new blockers or limitations;
 - the next planned candidate or action;
-- the location or current state of the complete `Master candidate table`,
+- the location or current state of the complete `Screening candidate table`,
   `Candidate Tracking Table`, and `Evidence Extraction Table`.
 
 Stage reports are not a substitute for the full working tables. After a stage
