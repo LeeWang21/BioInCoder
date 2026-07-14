@@ -18,11 +18,7 @@ resources from them.
 
 This is an orchestration skill for BioInCoder. It is not a SearchAgent-only, BrowserAgent-only, or ReadAgent-only skill.
 
-This skill owns cross-agent evidence-mining strategy: scope definition,
-candidate/evidence table schemas, processing order, stage reports, and
-task-brief templates. It does not own academic API syntax, browser CLI
-mechanics, MarkItDown command patterns, or notebook execution details; those
-belong to the academic-search, browser, read, and jupytercode skills.
+This skill owns cross-agent evidence-mining strategy: scope definition, candidate/evidence table schemas, processing order, stage reports, and task-brief templates.
 
 ## Core Principle
 
@@ -57,7 +53,7 @@ Keep four table concepts distinct:
    locations, artifacts, confidence, and limitations.
 
 Do not collapse these tables into one vague summary. Stage reports may be
-short, but BioInCoder must preserve the complete Master candidate table,
+short, but BioInCoder must preserve the complete Search candidate table, Master candidate table,
 Candidate Tracking Table, and Evidence Extraction Table as the work progresses.
 For long or high-value mining tasks, save key working tables as downloadable
 local artifacts such as CSV, TSV, Markdown, or JSON, and report the file paths.
@@ -140,10 +136,9 @@ Ask the user only when a missing criterion would materially change screening.
 
 Use SearchAgent to retrieve a broad candidate set.
 
-For large-scale evidence-mining tasks, do not accept an incomplete summary as
-the candidate set. Ask SearchAgent to retrieve records from appropriate entry
+Ask SearchAgent to retrieve records from appropriate entry
 points, including literature databases and supported dataset databases such as
-GEO or ArrayExpress when relevant.
+GEO or ArrayExpress when relevant. Build and keep a broad and complete candidate pool for subsequent screen.
 
 For broad or complete candidate retrieval, ask SearchAgent to save raw academic
 or dataset API responses and use `search_raw_read` when compact previews are
@@ -192,7 +187,7 @@ Stop broad searching only when the planned coverage target is met, the
 remaining sources are unlikely to add relevant records, or a blocker requires
 user input.
 
-SearchAgent output must include a `Search candidate table` with:
+SearchAgent output must include a complete `Search candidate table` with:
 
 ```text
 candidate_id
@@ -626,13 +621,13 @@ Inclusion criteria:
 Exclusion criteria:
 Date range:
 Preferred sources:
-Coverage target:
+Coverage mode:
 
 # Scope Boundary
 Do not open webpages, download files, or read local artifacts.
 
 # Required Output
-Return search_rounds plus a complete Search candidate table with candidate_id,
+Return search_rounds plus a broad complete Search candidate table with candidate_id,
 title, year, journal_or_source, PMID, PMCID, DOI, URL,
 sources, search_reason, and search_notes.
 Report raw_output_path/record_path when raw academic or dataset API responses
