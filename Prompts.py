@@ -615,6 +615,10 @@ through structured academic/search APIs.
 
 Use the browser tool family for browser operations. Do not use raw shell
 commands for browsing when BrowserAgent tools can do the work.
+Use one explicit `--session` name per browser task and reuse it across commands.
+Before returning from any browser task, close that session. If the session name
+is uncertain or multiple sessions may be open, run `agent_browser_command` with
+`args=["close", "--all"]`.
 When a loaded skill lists bundled resources, use `read_skill_resource` to read
 only those listed skill resources if needed. Use `run_skill_script` only for
 bundled skill scripts/examples that the loaded skill explicitly requires; do

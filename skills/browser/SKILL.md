@@ -295,10 +295,20 @@ Open, wait, inspect, act, wait again:
 
 After any click, form submit, navigation, scroll, or dynamic action, wait again
 before reading state. Prefer patient waits over immediate extraction.
+Use one explicit session name for a browser task unless independent sessions are
+required. Reuse that session for all commands in the task.
+
 When the task is done, close the session/browser:
 
 ```json
 {"args": ["--session", "task_page", "close"]}
+```
+
+If the session name is unknown or several sessions may have been opened, close
+all active browser sessions:
+
+```json
+{"args": ["close", "--all"], "timeout_seconds": 60}
 ```
 
 `agent_browser_command` truncates stdout/stderr by default to protect context. Use `max_output_chars` only when more output is genuinely needed.
@@ -503,6 +513,16 @@ If several sessions may be open, inspect sessions first:
 
 Then close the relevant session.
 
+If session state is ambiguous or multiple sessions may have leaked, close all
+active browser sessions:
+
+```json
+{"args": ["close", "--all"], "timeout_seconds": 60}
+```
+
+Do not use shell `pkill` from BrowserAgent unless the user explicitly asks for
+manual OS-level cleanup.
+
 ## Stuck Browser Daemon
 
 `The browser daemon seems stuck` usually means agent-browser's background daemon or controlled browser stopped responding.
@@ -537,7 +557,14 @@ Recovery pattern:
 {"args": ["--session", "task_page", "close"], "timeout_seconds": 30}
 ```
 
-4. Start a fresh session and continue only from the minimum needed URL/context.
+4. If the session name is uncertain or the daemon still appears stuck, close
+all active sessions:
+
+```json
+{"args": ["close", "--all"], "timeout_seconds": 60}
+```
+
+5. Start a fresh session and continue only from the minimum needed URL/context.
 
 Do not keep sending heavy snapshots or full-page extraction commands to a stuck session.
 
